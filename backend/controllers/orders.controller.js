@@ -1,6 +1,8 @@
-const db = require('../config/db');
-const Order = require('../models/orders.model');
-const OrderItem = require('../models/orderItems.model');
+const db = require("../config/db");
+const Order = require("../models/orders.model");
+const OrderItem = require("../models/orderItems.model");
+const { InventoryTransaction } = require("../models/inventory.model");
+const { requireP2 } = require("../middleware/package.middleware");
 
 exports.createOrder = async (req, res) => {
   const {
@@ -14,7 +16,7 @@ exports.createOrder = async (req, res) => {
     items,
   } = req.body;
 
-  // ✅ Required fields validation
+  // ✅ Validate required fields
   if (
     !user_name ||
     !user_email ||
@@ -22,9 +24,7 @@ exports.createOrder = async (req, res) => {
     !user_address ||
     !order_date
   ) {
-    return res
-      .status(400)
-      .json({ message: "Required fields are missing" });
+    return res.status(400).json({ message: "Required fields are missing" });
   }
 
   const conn = await db.getConnection();
@@ -43,8 +43,6 @@ exports.createOrder = async (req, res) => {
     }
 
     const order_number = `ORDNO-${nextNo.toString().padStart(3, "0")}`;
-
-    // ✅ Current logged in user id (middleware me set hona chahiye req.user.id)
     const userId = req.user?.id || null;
 
     // ✅ Insert into orders
@@ -78,7 +76,7 @@ exports.createOrder = async (req, res) => {
         }
       }
 
-      // ✅ Prepare item insert values
+      // ✅ Insert into order_items
       const itemValues = items.map((item) => [
         orderId,
         item.product_id,
@@ -91,45 +89,64 @@ exports.createOrder = async (req, res) => {
         [itemValues]
       );
 
-      // ✅ Update stock for each product
-      for (const item of items) {
-        const [productRows] = await conn.query(
-          "SELECT stock_quantity FROM products WHERE id = ?",
-          [item.product_id]
-        );
+      // ✅ Update stock and log inventory transactions for P2+
+      if (req.customerPackage >= 2) {
+        for (const item of items) {
+          const [productRows] = await conn.query(
+            "SELECT stock_quantity FROM products WHERE id = ?",
+            [item.product_id]
+          );
 
-        if (!productRows.length) {
-          await conn.rollback();
-          return res
-            .status(404)
-            .json({ message: `Product ${item.product_id} not found` });
-        }
+          if (!productRows.length) {
+            await conn.rollback();
+            return res
+              .status(404)
+              .json({ message: `Product ${item.product_id} not found` });
+          }
 
-        const availableStock = productRows[0].stock_quantity;
-        if (availableStock < item.qty) {
-          await conn.rollback();
-          return res
-            .status(400)
-            .json({
+          const availableStock = productRows[0].stock_quantity;
+          if (availableStock < item.qty) {
+            await conn.rollback();
+            return res.status(400).json({
               message: `Insufficient stock for product ID ${item.product_id}`,
             });
-        }
+          }
 
-        await conn.query(
-          "UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?",
-          [item.qty, item.product_id]
-        );
+          // ✅ Deduct stock
+          await conn.query(
+            "UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?",
+            [item.qty, item.product_id]
+          );
+
+          // ✅ Record inventory transaction (OUT)
+          await InventoryTransaction.create({
+            product_id: item.product_id,
+            order_id: orderId,
+            type: "OUT",
+            quantity: item.qty,
+            user_id: userId,
+          });
+
+          await InventoryTransaction.updateBalance(item.product_id, -item.qty);
+        }
+      } else {
+        // ✅ If below P2, just deduct stock but no inventory logs
+        for (const item of items) {
+          await conn.query(
+            "UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?",
+            [item.qty, item.product_id]
+          );
+        }
       }
     }
 
     // ✅ Commit transaction
     await conn.commit();
 
-    // ✅ Fetch created order with items
-    const [orderRows] = await conn.query(
-      "SELECT * FROM orders WHERE id = ?",
-      [orderId]
-    );
+    // ✅ Fetch order with items
+    const [orderRows] = await conn.query("SELECT * FROM orders WHERE id = ?", [
+      orderId,
+    ]);
     const [orderItems] = await conn.query(
       "SELECT * FROM order_items WHERE order_id = ?",
       [orderId]
@@ -142,12 +159,64 @@ exports.createOrder = async (req, res) => {
   } catch (err) {
     await conn.rollback();
     console.error("Create Order error:", err);
-    res
-      .status(500)
-      .json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error", error: err.message });
   } finally {
     conn.release();
   }
+};
+
+exports.updateStatus = (req, res) => {
+  const { status } = req.body;
+  const orderId = req.params.id;
+  db.query(
+    `UPDATE orders SET status = ? WHERE id = ?`,
+    [status, orderId],
+    (err) => {
+      if (err) return res.status(500).json(err);
+      if (
+        req.customerPackage >= 2 &&
+        (status === "COMPLETED" || status === "CANCELLED")
+      ) {
+        // Auto return stock
+        db.query(
+          `SELECT * FROM order_items WHERE order_id = ?`,
+          [orderId],
+          (err, items) => {
+            items.forEach((item) => {
+              InventoryTransaction.create(
+                {
+                  product_id: item.product_id,
+                  order_id: orderId,
+                  type: "IN",
+                  quantity: item.order_qty,
+                  user_id: req.user.id,
+                },
+                () => {}
+              );
+              InventoryTransaction.updateBalance(
+                item.product_id,
+                +item.order_qty,
+                () => {}
+              );
+            });
+          }
+        );
+      }
+      res.json({ message: "Status updated" });
+    }
+  );
+};
+
+exports.extendDeadline = (req, res) => {
+  const { extended_date } = req.body;
+  db.query(
+    `UPDATE orders SET extended_date = ? WHERE id = ?`,
+    [extended_date, req.params.id],
+    (err) => {
+      if (err) return res.status(500).json(err);
+      res.json({ message: "Deadline extended" });
+    }
+  );
 };
 
 // exports.createOrder = async (req, res) => {
@@ -167,7 +236,7 @@ exports.createOrder = async (req, res) => {
 //     const userId = req.user.id;
 
 //     const [orderResult] = await conn.query(
-//       `INSERT INTO orders 
+//       `INSERT INTO orders
 //         (order_number, user_id, user_name, user_email, user_phonenumber, user_address, order_date, notes, status)
 //        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 //       [order_number, userId, user_name, user_email, user_phonenumber, user_address, order_date, notes || null, status || "DRAFT"]
@@ -200,9 +269,9 @@ exports.createOrder = async (req, res) => {
 //     const [orderRows] = await conn.query("SELECT * FROM orders WHERE id = ?", [orderId]);
 //     const [orderItems] = await conn.query("SELECT * FROM order_items WHERE order_id = ?", [orderId]);
 
-//     res.status(201).json({ 
-//       message: "Order created successfully", 
-//       order: { ...orderRows[0], items: orderItems } 
+//     res.status(201).json({
+//       message: "Order created successfully",
+//       order: { ...orderRows[0], items: orderItems }
 //     });
 
 //   } catch (err) {
@@ -283,29 +352,49 @@ exports.createOrder = async (req, res) => {
 exports.getOrderById = async (req, res) => {
   try {
     const orderId = req.params.id;
-    const [orders] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);
+    const [orders] = await db.query("SELECT * FROM orders WHERE id = ?", [
+      orderId,
+    ]);
 
-    if (!orders.length) return res.status(404).json({ message: "Order not found" });
+    if (!orders.length)
+      return res.status(404).json({ message: "Order not found" });
 
-    const [items] = await db.query("SELECT * FROM order_items WHERE order_id = ?", [orderId]);
+    const [items] = await db.query(
+      "SELECT * FROM order_items WHERE order_id = ?",
+      [orderId]
+    );
     res.json({ ...orders[0], items });
   } catch (err) {
     console.error("Get order error:", err);
-    res.status(500).json({ message: "Internal server error", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Internal server error", error: err.message });
   }
 };
 
 // Update order (basic, without items update)
 exports.updateOrder = async (req, res) => {
   const id = req.params.id;
-  const { user_name, user_email, user_phonenumber, user_address, order_date, notes, status, items } = req.body;
+  const {
+    user_name,
+    user_email,
+    user_phonenumber,
+    user_address,
+    order_date,
+    notes,
+    status,
+    items,
+  } = req.body;
 
   const conn = await db.getConnection();
   await conn.beginTransaction();
 
   try {
     // Check if order exists
-    const [existingOrders] = await conn.query("SELECT * FROM orders WHERE id = ?", [id]);
+    const [existingOrders] = await conn.query(
+      "SELECT * FROM orders WHERE id = ?",
+      [id]
+    );
     if (!existingOrders.length) {
       await conn.rollback();
       return res.status(404).json({ message: "Order not found" });
@@ -331,11 +420,14 @@ exports.updateOrder = async (req, res) => {
     // Handle items
     if (items && Array.isArray(items)) {
       // Get old items
-      const [oldItems] = await conn.query("SELECT * FROM order_items WHERE order_id=?", [id]);
+      const [oldItems] = await conn.query(
+        "SELECT * FROM order_items WHERE order_id=?",
+        [id]
+      );
 
       // Convert oldItems to map for quick lookup
       const oldMap = {};
-      oldItems.forEach(item => {
+      oldItems.forEach((item) => {
         oldMap[item.product_id] = item;
       });
 
@@ -345,7 +437,9 @@ exports.updateOrder = async (req, res) => {
       for (const item of items) {
         if (!item.product_id || !item.qty) {
           await conn.rollback();
-          return res.status(400).json({ message: "Each item must have product_id and qty" });
+          return res
+            .status(400)
+            .json({ message: "Each item must have product_id and qty" });
         }
 
         if (oldMap[item.product_id]) {
@@ -400,8 +494,13 @@ exports.updateOrder = async (req, res) => {
     await conn.commit();
 
     // Fetch updated order
-    const [orderRows] = await conn.query("SELECT * FROM orders WHERE id=?", [id]);
-    const [orderItems] = await conn.query("SELECT * FROM order_items WHERE order_id=?", [id]);
+    const [orderRows] = await conn.query("SELECT * FROM orders WHERE id=?", [
+      id,
+    ]);
+    const [orderItems] = await conn.query(
+      "SELECT * FROM order_items WHERE order_id=?",
+      [id]
+    );
 
     res.json({
       message: "Order updated successfully",
@@ -458,15 +557,16 @@ exports.viewOrder = async (req, res) => {
   }
 };
 
-
 // Get all orders
 exports.getAllOrders = async (req, res) => {
   try {
     const orders = await Order.getAllOrders();
     res.json({ success: true, data: orders });
   } catch (err) {
-    console.error('Fetch orders error:', err);
-    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+    console.error("Fetch orders error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -477,14 +577,19 @@ exports.deleteOrder = async (req, res) => {
 
   try {
     await conn.beginTransaction();
-    const [orderRows] = await conn.query("SELECT * FROM orders WHERE id = ?", [id]);
+    const [orderRows] = await conn.query("SELECT * FROM orders WHERE id = ?", [
+      id,
+    ]);
     if (!orderRows.length) {
       await conn.rollback();
       return res.status(404).json({ message: "Order not found" });
     }
 
     // Get order_items of this order
-    const [orderItems] = await conn.query("SELECT * FROM order_items WHERE order_id = ?", [id]);
+    const [orderItems] = await conn.query(
+      "SELECT * FROM order_items WHERE order_id = ?",
+      [id]
+    );
 
     // Restore stock for each product
     for (const item of orderItems) {
@@ -510,4 +615,3 @@ exports.deleteOrder = async (req, res) => {
     conn.release();
   }
 };
-

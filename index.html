@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Signup - Chaties</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f6f8fa;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .signup-container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      width: 350px;
+      max-width: 100%;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin: 6px 0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      box-sizing: border-box;
+    }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    button:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+    }
+
+    .message {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 14px;
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    .debug-info {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .debug-info pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="signup-container">
+    <h2>Sign Up</h2>
+    <form id="signupForm">
+      <input type="text" name="first_name" placeholder="First Name" required />
+      <input type="text" name="last_name" placeholder="Last Name" required />
+      <input type="text" name="username" placeholder="Username" required />
+      <input type="email" name="email" placeholder="Email" required />
+      <input type="password" name="password" placeholder="Password" required />
+      <button type="submit">Sign Up</button>
+    </form>
+
+    <div id="response" class="message"></div>
+    <div id="debugInfo" class="debug-info" style="display: none;"></div>
+  </div>
+
+  <script>
+    document.getElementById("signupForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const form = e.target;
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const responseBox = document.getElementById("response");
+      const debugBox = document.getElementById("debugInfo");
+      
+      // Disable submit button
+      submitBtn.disabled = true;
+      
+      responseBox.style.color = "black";
+      responseBox.style.background = "#e7f3ff";
+      responseBox.innerText = "Registering...";
+      debugBox.style.display = "none";
+
+      // ✅ Create FormData
+      const formData = new FormData();
+      formData.append("first_name", form.first_name.value);
+      formData.append("last_name", form.last_name.value);
+      formData.append("username", form.username.value);
+      formData.append("email", form.email.value);
+      formData.append("password", form.password.value);
+      formData.append("confirm", form.password.value);
+      formData.append("gender", "1");
+      formData.append("birth_day", "11");
+      formData.append("birth_month", "11");
+      formData.append("birth_year", "2000");
+      formData.append("invitation_code", "KL0ggV42");
+      formData.append("newsletter_agree", "on");
+      formData.append("privacy_agree", "on");
+      // ⚠️ CRITICAL: Leave field1 empty (honeypot anti-spam)
+      formData.append("field1", "");
+
+      try {
+        const res = await fetch("https://chaties.in/includes/ajax/core/signup.php", {
+          method: "POST",
+          body: formData,
+          credentials: "include"
+        });
+
+        // Get response text first
+        const responseText = await res.text();
+        
+        // Debug logging
+        console.log("Response Status:", res.status);
+        console.log("Response Text:", responseText);
+        
+        debugBox.style.display = "block";
+        debugBox.innerHTML = `<strong>Debug Info:</strong><br>
+          Status: ${res.status}<br>
+          Response: <pre>${responseText || '(empty response)'}</pre>`;
+
+        // Try to parse as JSON
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (parseError) {
+          throw new Error("Invalid JSON response: " + responseText.substring(0, 100));
+        }
+
+        // Check for empty response (honeypot triggered)
+        if (!result || Object.keys(result).length === 0) {
+          responseBox.style.color = "red";
+          responseBox.style.background = "#ffe7e7";
+          responseBox.innerText = "⚠️ Signup blocked (possible honeypot trigger or already logged in)";
+          submitBtn.disabled = false;
+          return;
+        }
+
+        if (result.error) {
+          responseBox.style.color = "red";
+          responseBox.style.background = "#ffe7e7";
+          responseBox.innerText = "❌ " + result.message;
+          submitBtn.disabled = false;
+        } else if (result.callback) {
+          responseBox.style.color = "green";
+          responseBox.style.background = "#e7ffe7";
+          responseBox.innerText = "✅ Signup successful! Redirecting...";
+          
+          // Handle callback
+          if (result.callback.includes("reload")) {
+            setTimeout(() => window.location.reload(), 1500);
+          } else if (result.callback.includes("window.location.href")) {
+            const urlMatch = result.callback.match(/"(.*?)"/);
+            if (urlMatch) {
+              setTimeout(() => window.location.href = urlMatch[1], 1500);
+            }
+          }
+        } else {
+          responseBox.style.color = "green";
+          responseBox.style.background = "#e7ffe7";
+          responseBox.innerText = "✅ Signup successful!";
+          submitBtn.disabled = false;
+        }
+      } catch (err) {
+        console.error("Signup error:", err);
+        responseBox.style.color = "red";
+        responseBox.style.background = "#ffe7e7";
+        responseBox.innerText = "⚠️ Error: " + err.message;
+        submitBtn.disabled = false;
+        
+        debugBox.style.display = "block";
+        debugBox.innerHTML = `<strong>Error Details:</strong><br><pre>${err.stack || err.message}</pre>`;
+      }
+    });
+  </script>
+</body>
+</html>

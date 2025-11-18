@@ -1,49 +1,75 @@
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 
-exports.protect = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ message: 'Not authorized' });
+
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res
+      .status(401)
+      .json({ message: "Access token missing or invalid" });
+  }
+
+  const token = authHeader.split(" ")[1];
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // user.id, user.email, user.role
+    req.user = decoded;
     next();
   } catch (err) {
-    return res.status(401).json({ message: 'Token invalid' });
+    return res.status(403).json({ message: "Invalid or expired token" });
   }
 };
 
-exports.verifyAdmin = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ message: 'No token provided' });
+const protect = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ message: "Not authorized" });
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== 'super_admin') {
-      return res.status(403).json({ message: 'Access denied: Super Admin only' });
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Token invalid" });
+  }
+};
+
+const verifyAdmin = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ message: "No token provided" });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== "super_admin") {
+      return res
+        .status(403)
+        .json({ message: "Access denied: Super Admin only" });
     }
     req.user = decoded;
     next();
   } catch (err) {
-    res.status(401).json({ message: 'Invalid token' });
+    res.status(401).json({ message: "Invalid token" });
   }
 };
 
-
-
-exports.verifyToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Access token missing or invalid' });
+const checkRole = (allowedRoles) => (req, res, next) => {
+  if (!req.user || !allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({ error: "Forbidden: Insufficient role" });
   }
+  next();
+};
 
-  const token = authHeader.split(' ')[1];
+const checkSuperAdmin = checkRole(["super_admin"]);
+const checkAdmin = checkRole(["super_admin", "admin"]);
+const checkTeamMember = checkRole(["super_admin", "admin", "user"]);
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // Make user info available to next middleware/controller
-    next();
-  } catch (err) {
-    return res.status(403).json({ message: 'Invalid or expired token' });
-  }
+
+module.exports = {
+  authMiddleware: verifyToken,
+  verifyToken,
+  protect,
+  verifyAdmin,
+  checkRole,
+  checkSuperAdmin,
+  checkAdmin,
+  checkTeamMember,
 };
