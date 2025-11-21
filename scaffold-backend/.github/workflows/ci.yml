@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: scaffolddb_test
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+        ports:
+          - 3306:3306
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: Admin@1120
+      DB_DATABASE: scaffolddb_test
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install deps
+        run: npm ci
+      - name: Wait for MySQL
+        run: ./scripts/wait-for-it.sh 127.0.0.1:3306 -t 60
+      - name: Run migrations
+        run: npm run migration:run
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test -- --runInBand
+      - name: Build
+        run: npm run build

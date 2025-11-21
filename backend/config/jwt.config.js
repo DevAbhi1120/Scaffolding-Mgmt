@@ -1,16 +1,19 @@
+// jwt.config.js
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = '1d';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
 
-exports.generateToken = (payload) => {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+exports.generateToken = (payload, options = {}) => {
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: options.expiresIn || JWT_EXPIRES_IN
+  });
 };
 
 exports.verifyToken = (token) => {
   try {
     return jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    return null;
+  } catch {
+    return null; // safer than throwing
   }
 };

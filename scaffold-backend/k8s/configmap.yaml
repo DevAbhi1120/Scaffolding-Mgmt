@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scaffold-backend-config
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  # other non-sensitive defaults
