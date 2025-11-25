@@ -1,4 +1,4 @@
-import { InventoryItem } from '../database/entities/inventory_item.entity';
+import { InventoryItem } from '../database/entities/inventory-item.entity';
 import { Order } from '../database/entities/order.entity';
 export declare class ReturnEvent {
     id: string;

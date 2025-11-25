@@ -1,19 +1,16 @@
+// src/inventory/inventory.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { InventoryItem } from '../database/entities/inventory_item.entity';
-import { InventoryMovement } from '../database/entities/inventory_movement.entity';
-import { Product } from '../database/entities/product.entity';
+import { InventoryItem } from '../database/entities/inventory-item.entity';
+import { InventoryMovement } from '../database/entities/inventory-movement.entity';
 import { InventoryService } from './inventory.service';
 import { InventoryController } from './inventory.controller';
-import { BillingModule } from '../billing/billing.module';
+import { LossController } from './loss.controller';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([InventoryItem, InventoryMovement, Product]),
-    BillingModule
-  ],
+  imports: [TypeOrmModule.forFeature([InventoryItem, InventoryMovement])],
+  controllers: [InventoryController, LossController],
   providers: [InventoryService],
-  controllers: [InventoryController],
-  exports: [InventoryService]
+  exports: [InventoryService],
 })
-export class InventoryModule { }
+export class InventoryModule {}

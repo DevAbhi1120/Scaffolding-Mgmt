@@ -14,6 +14,8 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CategoriesController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer = require("multer");
 const categories_service_1 = require("./categories.service");
 const create_category_dto_1 = require("./dto/create-category.dto");
 const update_category_dto_1 = require("./dto/update-category.dto");
@@ -21,17 +23,21 @@ let CategoriesController = class CategoriesController {
     constructor(svc) {
         this.svc = svc;
     }
-    async create(dto) {
-        return this.svc.create(dto);
+    async create(dto, file) {
+        return this.svc.create(dto, file);
     }
     async list(search, page, limit) {
-        return this.svc.findAll({ search, page: Number(page), limit: Number(limit) });
+        return this.svc.findAll({
+            search,
+            page: Number(page),
+            limit: Number(limit),
+        });
     }
     async get(id) {
         return this.svc.findOne(id);
     }
-    async update(id, dto) {
-        return this.svc.update(id, dto);
+    async update(id, dto, file) {
+        return this.svc.update(id, dto, file);
     }
     async remove(id) {
         return this.svc.remove(id);
@@ -40,9 +46,13 @@ let CategoriesController = class CategoriesController {
 exports.CategoriesController = CategoriesController;
 __decorate([
     (0, common_1.Post)(),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('thumbnail_image', {
+        storage: multer.memoryStorage(),
+    })),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.UploadedFile)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_category_dto_1.CreateCategoryDto]),
+    __metadata("design:paramtypes", [create_category_dto_1.CreateCategoryDto, Object]),
     __metadata("design:returntype", Promise)
 ], CategoriesController.prototype, "create", null);
 __decorate([
@@ -63,10 +73,14 @@ __decorate([
 ], CategoriesController.prototype, "get", null);
 __decorate([
     (0, common_1.Put)(':id'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('thumbnail_image', {
+        storage: multer.memoryStorage(),
+    })),
     __param(0, (0, common_1.Param)('id', new common_1.ParseUUIDPipe())),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.UploadedFile)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, update_category_dto_1.UpdateCategoryDto]),
+    __metadata("design:paramtypes", [String, update_category_dto_1.UpdateCategoryDto, Object]),
     __metadata("design:returntype", Promise)
 ], CategoriesController.prototype, "update", null);
 __decorate([

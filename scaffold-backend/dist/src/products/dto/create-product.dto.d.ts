@@ -1,10 +1,12 @@
-import { ProductType } from '../../database/entities/product-type.enum';
 export declare class CreateProductDto {
     categoryId: string;
+    productTypeId: string;
     name: string;
+    unit: string;
+    stockQuantity: number;
+    price: number;
+    status: number;
     sku?: string;
-    unit?: string;
-    defaultCost?: number;
-    productType?: ProductType;
+    description?: string;
     extra?: any;
 }

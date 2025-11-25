@@ -6,6 +6,7 @@ import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
 import Input from "../../components/form/input/InputField";
 import FileInput from "../../components/form/input/FileInput";
+import { BASE_URL } from "../../components/BaseUrl/config";
 
 export default function AddProduct() {
   const navigate = useNavigate();
@@ -13,86 +14,78 @@ export default function AddProduct() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
 
-  // Form fields
   const [categories, setCategories] = useState<any[]>([]);
   const [productTypes, setProductTypes] = useState<any[]>([]);
-  const [productTypeId, setProductTypeId] = useState<number | "">("");
-  const [categoryId, setCategoryId] = useState<number | "">("");
+
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [productTypeId, setProductTypeId] = useState<string>("");
+
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("");
   const [stockQty, setStockQty] = useState<number | "">("");
   const [price, setPrice] = useState<number | "">("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<number>(1);
-  const [thumbnailImage, setThumbnailImage] = useState<File | null>(null);
+  const [images, setImages] = useState<File[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Fetch categories
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/api/categories", {
+        const res = await axios.get(`${BASE_URL}categories`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (res.data.success) {
-          setCategories(res.data.data || []);
-        }
+        setCategories(res.data.items || []);
       } catch (err) {
         console.error("Failed to fetch categories", err);
       }
     };
 
-    const fetchProductType = async () => {
+    const fetchProductTypes = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/api/productTypes", {
+        const res = await axios.get(`${BASE_URL}product-types`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (res.data.success) {
-          setProductTypes(res.data.data || []);
-        }
+        setProductTypes(res.data.items || []);
       } catch (err) {
         console.error("Failed to fetch product type", err);
       }
     };
+
     fetchCategories();
-    fetchProductType();
+    fetchProductTypes();
   }, []);
 
-  // ✅ Clear error for single field
   const clearError = (field: string) => {
     setErrors((prev) => {
-      const newErrors = { ...prev };
-      delete newErrors[field];
-      return newErrors;
+      const next = { ...prev };
+      delete next[field];
+      return next;
     });
   };
 
-  // ✅ Validation
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!categoryId) newErrors.categoryId = "Please select a category.";
-    if (!productTypeId) newErrors.productTypeId = "Please select a product type.";
+    if (!productTypeId)
+      newErrors.productTypeId = "Please select a product type.";
     if (name.trim() === "") newErrors.name = "Product name is required.";
     if (unit.trim() === "") newErrors.unit = "Unit is required.";
     if (stockQty === "" || Number(stockQty) <= 0)
       newErrors.stockQty = "Stock quantity must be greater than 0.";
-    // if (description.trim() === "")
-    //   newErrors.description = "Description is required.";
-
+    if (price === "" || Number(price) < 0)
+      newErrors.price = "Price is required.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setThumbnailImage(file);
-      console.log("Selected file:", file.name);
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      setImages(Array.from(files));
     }
   };
 
@@ -103,7 +96,7 @@ export default function AddProduct() {
     setMessageType("");
 
     if (!validateForm()) {
-      setLoading(false); 
+      setLoading(false);
       return;
     }
 
@@ -117,19 +110,20 @@ export default function AddProduct() {
       }
 
       const formData = new FormData();
-      formData.append("category_id", String(categoryId));
-      formData.append("product_type_id", String(productTypeId));
+      formData.append("categoryId", categoryId);
+      formData.append("productTypeId", productTypeId);
       formData.append("name", name);
       formData.append("unit", unit);
-      formData.append("stock_quantity", String(stockQty));
+      formData.append("stockQuantity", String(stockQty));
       formData.append("price", String(price));
       formData.append("status", String(status));
-      formData.append("description", description); 
-      if (thumbnailImage) {
-        formData.append("thumbnail_image", thumbnailImage);
-      }
+      formData.append("description", description);
 
-      await axios.post("http://localhost:5000/api/products", formData, {
+      images.forEach((file) => {
+        formData.append("images", file); // field name must match FilesInterceptor('images')
+      });
+
+      await axios.post(`${BASE_URL}products`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -142,7 +136,6 @@ export default function AddProduct() {
         navigate("/product-list");
       }, 1000);
 
-      // Reset form
       setCategoryId("");
       setProductTypeId("");
       setName("");
@@ -151,7 +144,7 @@ export default function AddProduct() {
       setPrice("");
       setDescription("");
       setStatus(1);
-      setThumbnailImage(null);
+      setImages([]);
       setErrors({});
     } catch (error) {
       console.error("Add product error:", error);
@@ -167,18 +160,15 @@ export default function AddProduct() {
       <PageBreadcrumb pageTitle="Add Product" />
       <ComponentCard title="Fill input fields">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Category */}
           <div>
-            <Label htmlFor="category">Select Category <span style={{ color: "red" }}>*</span></Label>
+            <Label htmlFor="category">
+              Select Category <span style={{ color: "red" }}>*</span>
+            </Label>
             <select
-              id="category"
               value={categoryId}
-              onChange={(e) => {
-                setCategoryId(Number(e.target.value));
-                clearError("categoryId");
-              }}
+              onChange={(e) => setCategoryId(e.target.value)}
               className="w-full border border-gray-300 rounded-md p-2"
-            >
+              >
               <option value="">-- Select Category --</option>
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
@@ -192,30 +182,36 @@ export default function AddProduct() {
           </div>
 
           <div>
-            <Label htmlFor="productTypeId">Select Product Type <span style={{ color: "red" }}>*</span></Label>
+            <Label htmlFor="productTypeId">
+              Select Product Type <span style={{ color: "red" }}>*</span>
+            </Label>
             <select
               id="productTypeId"
               value={productTypeId}
               onChange={(e) => {
-                setProductTypeId(Number(e.target.value));
+                setProductTypeId(e.target.value);
                 clearError("productTypeId");
               }}
               className="w-full border border-gray-300 rounded-md p-2"
             >
               <option value="">-- Select Product Type --</option>
-              {productTypes.map((ProType) => (
-                <option key={ProType.id} value={ProType.id}>
-                  {ProType.name}
+              {productTypes.map((pt) => (
+                <option key={pt.id} value={pt.id}>
+                  {pt.name}
                 </option>
               ))}
             </select>
             {errors.productTypeId && (
-              <p className="text-red-600 text-sm mt-1">{errors.productTypeId}</p>
+              <p className="text-red-600 text-sm mt-1">
+                {errors.productTypeId}
+              </p>
             )}
           </div>
-          {/* Name */}
+
           <div>
-            <Label htmlFor="name">Product Name <span style={{ color: "red" }}>*</span></Label>
+            <Label htmlFor="name">
+              Product Name <span style={{ color: "red" }}>*</span>
+            </Label>
             <Input
               type="text"
               id="name"
@@ -230,9 +226,10 @@ export default function AddProduct() {
             )}
           </div>
 
-          {/* Stock Qty */}
           <div>
-            <Label htmlFor="stockQty">Stock Quantity <span style={{ color: "red" }}>*</span></Label>
+            <Label htmlFor="stockQty">
+              Stock Quantity <span style={{ color: "red" }}>*</span>
+            </Label>
             <Input
               type="number"
               id="stockQty"
@@ -247,9 +244,10 @@ export default function AddProduct() {
             )}
           </div>
 
-          {/* Unit */}
           <div>
-            <Label htmlFor="unit">Unit <span style={{ color: "red" }}>*</span></Label>
+            <Label htmlFor="unit">
+              Unit <span style={{ color: "red" }}>*</span>
+            </Label>
             <Input
               type="text"
               id="unit"
@@ -264,9 +262,10 @@ export default function AddProduct() {
             )}
           </div>
 
-          {/* Price */}
           <div>
-            <Label htmlFor="price">Price <span style={{ color: "red" }}>*</span></Label>
+            <Label htmlFor="price">
+              Price <span style={{ color: "red" }}>*</span>
+            </Label>
             <Input
               type="number"
               id="price"
@@ -281,9 +280,8 @@ export default function AddProduct() {
             )}
           </div>
 
-          {/* Description */}
           <div>
-            <Label htmlFor="description">Description </Label>
+            <Label htmlFor="description">Description</Label>
             <textarea
               id="description"
               value={description}
@@ -299,7 +297,6 @@ export default function AddProduct() {
             )}
           </div>
 
-          {/* Status */}
           <div>
             <Label htmlFor="status">Status</Label>
             <select
@@ -313,13 +310,12 @@ export default function AddProduct() {
             </select>
           </div>
 
-          {/* Thumbnail */}
           <div>
-            <Label>Upload Thumbnail</Label>
-            <FileInput onChange={handleFileChange} />
+            <Label>Upload Images</Label>
+            {/* Make sure your FileInput supports "multiple" and passes it through */}
+            <FileInput onChange={handleFileChange} multiple />
           </div>
 
-          {/* Submit */}
           <div>
             <button
               type="submit"
@@ -330,7 +326,6 @@ export default function AddProduct() {
             </button>
           </div>
 
-          {/* Message */}
           {message && (
             <p
               className={`text-sm ${

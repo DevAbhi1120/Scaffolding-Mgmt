@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { InventoryItem } from '../database/entities/inventory_item.entity';
+import { InventoryItem } from '../database/entities/inventory-item.entity';
 
 @Injectable()
 export class ReportsService {

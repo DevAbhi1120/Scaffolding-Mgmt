@@ -6,14 +6,24 @@ import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
 import Input from "../../components/form/input/InputField";
 import FileInput from "../../components/form/input/FileInput";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
+
+interface CategoryResponse {
+  id: string;
+  name: string;
+  description?: string;
+  thumbnailImage?: string | null;
+}
 
 export default function EditCategory() {
-  const { id } = useParams(); 
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
   const [categoryName, setCategoryName] = useState("");
+  const [description, setDescription] = useState("");
   const [thumbnailImage, setThumbnailImage] = useState<File | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -22,25 +32,32 @@ export default function EditCategory() {
     const fetchCategory = async () => {
       try {
         const token = localStorage.getItem("token");
-        const response = await axios.get(
-          `http://localhost:5000/api/categories/${id}`,
+        const response = await axios.get<CategoryResponse>(
+          `${BASE_URL}categories/${id}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
         );
         console.log("Fetched category data:", response.data);
-        setCategoryName(response.data.name);
 
-        if (response.data.thumbnail_image) {
-          setPreviewImage(`http://localhost:5000/uploads/categories/${response.data.thumbnail_image}`);
+        const data = response.data;
+        setCategoryName(data.name);
+        setDescription(data.description || "");
+
+        if (data.thumbnailImage) {
+          const img = data.thumbnailImage.startsWith("http")
+            ? data.thumbnailImage
+            : `${BASE_IMAGE_URL}${data.thumbnailImage}`;
+          setPreviewImage(img);
         }
       } catch (error) {
+        console.error("Failed to fetch category details.", error);
         setMessage("Failed to fetch category details.");
         setMessageType("error");
       }
     };
 
-    fetchCategory();
+    if (id) fetchCategory();
   }, [id]);
 
   const clearError = (field: string) => {
@@ -53,12 +70,14 @@ export default function EditCategory() {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (categoryName === "") newErrors.categoryName = "Category name is required.";
+    if (!categoryName.trim())
+      newErrors.categoryName = "Category name is required.";
+    if (!description.trim()) newErrors.description = "Description is required.";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-    
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -67,7 +86,6 @@ export default function EditCategory() {
     }
   };
 
-  // ✅ Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -75,65 +93,89 @@ export default function EditCategory() {
     setMessageType("");
 
     if (!validateForm()) {
-      return; // stop submit if form invalid
+      setLoading(false);
+      return;
     }
 
     try {
       const token = localStorage.getItem("token");
       if (!token) {
         setMessage("Authentication token not found.");
+        setMessageType("error");
         setLoading(false);
         return;
       }
+
       const formData = new FormData();
-      formData.append("name", categoryName);
+      formData.append("name", categoryName.trim());
+      formData.append("description", description.trim());
       if (thumbnailImage) {
         formData.append("thumbnail_image", thumbnailImage);
       }
-      await axios.put(
-        `http://localhost:5000/api/categories/${id}`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+
+      await axios.put(`${BASE_URL}categories/${id}`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
       setMessage("Category updated successfully!");
       setMessageType("success");
       setTimeout(() => {
-        navigate("/category-list"); 
+        navigate("/category-list");
       }, 1500);
     } catch (error) {
+      console.error("Failed to update category.", error);
       setMessage("Failed to update category.");
       setMessageType("error");
     } finally {
       setLoading(false);
     }
   };
+
   return (
     <>
       <PageBreadcrumb pageTitle="Edit Category" />
       <ComponentCard title="Update input fields">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <Label htmlFor="input">Edit Category Name <span style={{ color: "red" }}>*</span></Label>
+            <Label htmlFor="input">
+              Edit Category Name <span style={{ color: "red" }}>*</span>
+            </Label>
             <Input
               type="text"
               id="input"
               value={categoryName}
-              // onChange={(e) => setCategoryName(e.target.value)}
-              // required
               onChange={(e) => {
                 clearError("categoryName");
-                setCategoryName(e.target.value); // ✅ direct assign
+                setCategoryName(e.target.value);
               }}
             />
-            {errors.categoryName && (   
+            {errors.categoryName && (
               <p className="text-red-600 text-sm mt-1">{errors.categoryName}</p>
             )}
           </div>
+
+          <div>
+            <Label htmlFor="description">
+              Description <span style={{ color: "red" }}>*</span>
+            </Label>
+            <textarea
+              id="description"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-transparent dark:border-gray-700 dark:text-white"
+              rows={4}
+              value={description}
+              onChange={(e) => {
+                clearError("description");
+                setDescription(e.target.value);
+              }}
+            />
+            {errors.description && (
+              <p className="text-red-600 text-sm mt-1">{errors.description}</p>
+            )}
+          </div>
+
           <div>
             <Label>Update Thumbnail</Label>
             <FileInput onChange={handleFileChange} className="custom-class" />
@@ -145,15 +187,17 @@ export default function EditCategory() {
               />
             )}
           </div>
+
           <div>
             <button
               type="submit"
-              className="px-6 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+              className="px-6 py-2 text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed"
               disabled={loading}
             >
               {loading ? "Updating..." : "Update"}
             </button>
           </div>
+
           {message && (
             <p
               className={`text-sm ${

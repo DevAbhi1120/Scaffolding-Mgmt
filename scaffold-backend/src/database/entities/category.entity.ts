@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+// src/database/entities/category.entity.ts
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  OneToMany,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Index,
+} from 'typeorm';
 import { Product } from './product.entity';
 
 @Entity({ name: 'product_categories' })
@@ -12,6 +21,9 @@ export class Category {
 
   @Column({ type: 'text', nullable: true })
   description?: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  thumbnailImage?: string;
 
   @OneToMany(() => Product, (p) => p.category)
   products: Product[];

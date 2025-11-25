@@ -2,12 +2,20 @@ import { InventoryService } from './inventory.service';
 import { MarkDamagedDto } from './dto/mark-damaged.dto';
 import { MarkLostDto } from './dto/mark-lost.dto';
 import { RecoverItemDto } from './dto/recover-item.dto';
-import { Request } from 'express';
-export declare class InventoryLossController {
-    private inventoryService;
+export declare class LossController {
+    private readonly inventoryService;
     constructor(inventoryService: InventoryService);
-    markDamaged(dto: MarkDamagedDto, req: Request): Promise<import("../database/entities/inventory_item.entity").InventoryItem>;
-    markLost(dto: MarkLostDto, req: Request): Promise<import("../database/entities/inventory_item.entity").InventoryItem>;
-    recover(dto: RecoverItemDto, req: Request): Promise<import("../database/entities/inventory_item.entity").InventoryItem>;
-    list(productId?: string, from?: string, to?: string): Promise<import("../database/entities/inventory_item.entity").InventoryItem[]>;
+    markDamaged(dto: MarkDamagedDto, req: any): Promise<{
+        success: boolean;
+    }>;
+    markLost(dto: MarkLostDto, req: any): Promise<{
+        success: boolean;
+    }>;
+    recoverItem(dto: RecoverItemDto, req: any): Promise<{
+        success: boolean;
+    }>;
+    listLostDamaged(productId?: string, from?: string, to?: string): Promise<{
+        success: boolean;
+        data: import("../database/entities/inventory-item.entity").InventoryItem[];
+    }>;
 }

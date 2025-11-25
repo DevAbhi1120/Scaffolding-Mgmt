@@ -22,6 +22,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ReturnsModule } from './returns/returns.module';
+import { ProductTypesModule } from './product-types/product-types.module';
 import { AuditLog } from './common/entities/audit-log.entity';
 
 @Module({
@@ -33,12 +34,13 @@ import { AuditLog } from './common/entities/audit-log.entity';
     JobsModule,
     BuildersModule,
     CategoriesModule,
+    ProductTypesModule,
     ProductsModule,
-    OrdersModule,
     InventoryModule,
-    FilesModule,
-    NotificationsModule,
+    OrdersModule,
     ChecklistsModule,
+    NotificationsModule,
+    FilesModule,
     SwmsModule,
     ReportsModule,
     ScheduleModule.forRoot(),

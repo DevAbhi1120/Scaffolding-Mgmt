@@ -1,5 +1,6 @@
+// src/pages/users/UserList.tsx
 import { useEffect, useState } from "react";
-import {useNavigate } from "react-router-dom"; // ✅ fix import
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import ComponentCard from "../../components/common/ComponentCard";
@@ -15,8 +16,8 @@ import {
 } from "../../components/ui/table/";
 import Badge from "../../components/ui/badge/Badge";
 import { TrashBinIcon, PencilIcon } from "../../icons";
+import { BASE_URL } from "../../components/BaseUrl/config.tsx";
 
-// Define the User interface based on API response
 interface User {
   id: number;
   name: string;
@@ -26,93 +27,74 @@ interface User {
   profile_image: string | null;
   status: number;
 }
-  interface RoleLabels {
-    super_admin: string;
-    admin: string;
-    user: string;
-  }
 
-  const roleLabels: RoleLabels = {
-    super_admin: "Super Admin",
-    admin: "Admin",
-    user: "Team Member",
-  };
+interface RoleLabels {
+  super_admin: string;
+  admin: string;
+  user: string;
+}
 
-
+const roleLabels: RoleLabels = {
+  super_admin: "Super Admin",
+  admin: "Admin",
+  user: "Team Member",
+};
 
 export default function UserList() {
-  const navigate = useNavigate(); // ✅ for redirect
+  const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
-
-
-
 
   const handleEdit = (id: number) => {
     navigate(`/edit-user/${id}`);
   };
 
+  const handleDelete = async (id: number) => {
+    const result = await Swal.fire({
+      title: "Are you sure?",
+      text: "This action cannot be undone!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it!",
+    });
 
-const handleDelete = async (id: number) => {
-  const result = await Swal.fire({
-    title: "Are you sure?",
-    text: "This action cannot be undone!",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonColor: "#d33",
-    cancelButtonColor: "#3085d6",
-    confirmButtonText: "Yes, delete it!",
-  });
+    if (!result.isConfirmed) return;
 
-  if (result.isConfirmed) {
     try {
       const token = localStorage.getItem("token");
 
-      const response = await fetch(`http://localhost:5000/api/users/${id}/delete`, {
-        method: "PUT", 
+      await axios.delete(`${BASE_URL}users/${id}`, {
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to delete user.");
-      }
-
       await Swal.fire("Deleted!", "User has been deleted.", "success");
-         // 🔁 Update local state without refetch
-      setUsers((prevUsers) => prevUsers.filter((user) => user.id !== id));
 
-      // Optional: Refresh list or remove user from state
+      setUsers((prev) => prev.filter((user) => user.id !== id));
     } catch (error) {
       console.error("Delete error:", error);
       Swal.fire("Error!", "Something went wrong.", "error");
     }
-  }
-};
+  };
 
+  const fetchUsers = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(`${BASE_URL}users`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      setUsers(res.data);
+    } catch (error) {
+      console.error("Failed to fetch users", error);
+    }
+  };
 
   useEffect(() => {
-    const fetchUsers = async () => {
-
-      try {
-        const token = localStorage.getItem("token");
-
-        console.log("usertoken",token);
-        const res = await axios.get("http://localhost:5000/api/users", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (res.data.success) {
-          setUsers(res.data.users);
-        }
-      } catch (error) {
-        console.error("Failed to fetch users", error);
-      }
-    };
-
     fetchUsers();
   }, []);
 
@@ -160,7 +142,6 @@ const handleDelete = async (id: number) => {
                     >
                       Actions
                     </TableCell>
-
                   </TableRow>
                 </TableHeader>
 
@@ -187,8 +168,8 @@ const handleDelete = async (id: number) => {
                               {user.name}
                             </span>
                             <span className="block text-gray-500 text-theme-xs dark:text-gray-400">
-                             {roleLabels[user.role as keyof RoleLabels] || user.role}
-
+                              {roleLabels[user.role as keyof RoleLabels] ||
+                                user.role}
                             </span>
                           </div>
                         </div>
@@ -215,27 +196,24 @@ const handleDelete = async (id: number) => {
                         </Badge>
                       </TableCell>
                       <TableCell className="px-4 py-3 text-start">
-                          <div className="flex items-center gap-3">
-                            {/* Edit Button */}
-                            <button
-                              onClick={() => handleEdit(user.id)}
-                              className="text-blue-600 hover:text-blue-800"
-                              title="Edit"
-                            >
-                              <PencilIcon className="w-5 h-5" />
-                            </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => handleEdit(user.id)}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit"
+                          >
+                            <PencilIcon className="w-5 h-5" />
+                          </button>
 
-                            {/* Delete Button */}
-                            <button
-                              onClick={() => handleDelete(user.id)}
-                              className="text-red-600 hover:text-red-800"
-                              title="Delete"
-                            >
-                              <TrashBinIcon className="w-5 h-5" />
-                            </button>
-                          </div>
-                        </TableCell>
-
+                          <button
+                            onClick={() => handleDelete(user.id)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete"
+                          >
+                            <TrashBinIcon className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

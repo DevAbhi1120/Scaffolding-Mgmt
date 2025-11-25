@@ -9,12 +9,11 @@ export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const {user, logout} = useContext(AuthContext);
 
-  console.log(user);
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    logout(); // clears localStorage/session and context
-    navigate("/signin"); // redirect to login page
+    logout();
+    navigate("/signin");
   };
 
 

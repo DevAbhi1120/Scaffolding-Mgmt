@@ -1,3 +1,4 @@
+// src/pages/product-types/AddProductType.tsx
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -6,27 +7,33 @@ import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
 import Input from "../../components/form/input/InputField";
 import FileInput from "../../components/form/input/FileInput";
+import { BASE_URL } from "../../components/BaseUrl/config";
 
 export default function AddProductType() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [productTypeName, setProductTypeName] = useState("");
-  const [thumbnailImage, setThumbnailImage] = useState<File | null>(null);
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
+
+  const [productTypeName, setProductTypeName] = useState("");
+  const [description, setDescription] = useState("");
+  const [thumbnailImage, setThumbnailImage] = useState<File | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
   const navigate = useNavigate();
 
   const clearError = (field: string) => {
     setErrors((prev) => {
-      const newErrors = { ...prev };
-      delete newErrors[field];
-      return newErrors;
+      const next = { ...prev };
+      delete next[field];
+      return next;
     });
   };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (productTypeName === "") newErrors.productTypeName = "Product type name is required.";
+    if (!productTypeName.trim())
+      newErrors.productTypeName = "Product type name is required.";
+    if (!description.trim()) newErrors.description = "Description is required.";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -46,41 +53,45 @@ export default function AddProductType() {
     setMessage("");
     setMessageType("");
 
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      setLoading(false);
+      return;
+    }
 
     try {
       const token = localStorage.getItem("token");
       if (!token) {
         setMessage("Authentication token not found.");
+        setMessageType("error");
         setLoading(false);
         return;
       }
 
       const formData = new FormData();
-      formData.append("name", productTypeName);
+      formData.append("name", productTypeName.trim());
+      formData.append("description", description.trim());
       if (thumbnailImage) {
         formData.append("thumbnail_image", thumbnailImage);
       }
 
-      const response = await axios.post(
-        "http://localhost:5000/api/productTypes",
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      await axios.post(`${BASE_URL}product-types`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
-      setMessage("Product type added succe                                          ssfully!");
-      setProductTypeName("");
-      setThumbnailImage(null);
+      setMessage("Product type added successfully!");
       setMessageType("success");
+      setProductTypeName("");
+      setDescription("");
+      setThumbnailImage(null);
+
       setTimeout(() => {
-        navigate("/product-type-list"); // redirect after success
+        navigate("/product-type-list");
       }, 1500);
     } catch (error) {
+      console.error(error);
       setMessage("Failed to add product type.");
       setMessageType("error");
     } finally {
@@ -94,37 +105,70 @@ export default function AddProductType() {
       <ComponentCard title="Fill input fields">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <Label htmlFor="input">
+            <Label htmlFor="productTypeName">
               Enter Product Type Name <span style={{ color: "red" }}>*</span>
             </Label>
             <Input
               type="text"
-              id="input"
+              id="productTypeName"
+              placeholder="Product Type Name"
               value={productTypeName}
               onChange={(e) => {
                 clearError("productTypeName");
-                setProductTypeName(e.target.value); 
+                setProductTypeName(e.target.value);
               }}
             />
-            {errors.productTypeName && (   
-              <p className="text-red-600 text-sm mt-1">{errors.productTypeName}</p>
+            {errors.productTypeName && (
+              <p className="text-red-600 text-sm mt-1">
+                {errors.productTypeName}
+              </p>
             )}
           </div>
+
+          <div>
+            <Label htmlFor="description">
+              Description <span style={{ color: "red" }}>*</span>
+            </Label>
+            <textarea
+              id="description"
+              placeholder="Description"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-transparent dark:border-gray-700 dark:text-white"
+              rows={4}
+              value={description}
+              onChange={(e) => {
+                clearError("description");
+                setDescription(e.target.value);
+              }}
+            />
+            {errors.description && (
+              <p className="text-red-600 text-sm mt-1">{errors.description}</p>
+            )}
+          </div>
+
           <div>
             <Label>Upload file</Label>
             <FileInput onChange={handleFileChange} className="custom-class" />
           </div>
+
           <div>
             <button
               type="submit"
-              className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
+              className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
               disabled={loading}
             >
               {loading ? "Submitting..." : "Submit"}
             </button>
           </div>
 
-          {message && <p className="text-sm text-green-500">{message}</p>}
+          {message && (
+            <p
+              className={`text-sm mt-1 ${
+                messageType === "success" ? "text-green-500" : "text-red-500"
+              }`}
+            >
+              {message}
+            </p>
+          )}
         </form>
       </ComponentCard>
     </>

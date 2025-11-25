@@ -1,4 +1,4 @@
-import { InventoryStatus } from '../../database/entities/inventory_item.entity';
+import { InventoryStatus } from '../../database/entities/inventory-item.entity';
 export declare class CreateInventoryItemDto {
     productId: string;
     serialNumber?: string;

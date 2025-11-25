@@ -1,45 +1,58 @@
-import { Controller, Post, Body, UseGuards, Req, Param, Get, Query } from '@nestjs/common';
+// src/inventory/loss.controller.ts
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Request,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import { InventoryService } from './inventory.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
 import { MarkDamagedDto } from './dto/mark-damaged.dto';
 import { MarkLostDto } from './dto/mark-lost.dto';
 import { RecoverItemDto } from './dto/recover-item.dto';
-import { Request } from 'express';
 
-@Controller('inventory')
-export class InventoryLossController {
-  constructor(private inventoryService: InventoryService) {}
+@Controller('inventories/loss')
+export class LossController {
+  constructor(private readonly inventoryService: InventoryService) { }
 
-  // Admin or team member can mark damaged (team member may report, admin approves billing)
-  @Post('mark-damaged')
-  @UseGuards(JwtAuthGuard)
-  async markDamaged(@Body() dto: MarkDamagedDto, @Req() req: Request) {
-    const user = req.user as any;
-    return this.inventoryService.markDamaged(dto, user?.userId ?? user?.id);
+  @Post('damaged')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async markDamaged(@Body() dto: MarkDamagedDto, @Request() req: any) {
+    const user = req.user;
+    await this.inventoryService.markDamaged(dto, user?.userId ?? user?.id);
+    return { success: true };
   }
 
-  @Post('mark-lost')
-  @UseGuards(JwtAuthGuard)
-  async markLost(@Body() dto: MarkLostDto, @Req() req: Request) {
-    const user = req.user as any;
-    return this.inventoryService.markLost(dto, user?.userId ?? user?.id);
+  @Post('lost')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async markLost(@Body() dto: MarkLostDto, @Request() req: any) {
+    const user = req.user;
+    await this.inventoryService.markLost(dto, user?.userId ?? user?.id);
+    return { success: true };
   }
 
   @Post('recover')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'SUPER_ADMIN')
-  async recover(@Body() dto: RecoverItemDto, @Req() req: Request) {
-    const user = req.user as any;
-    return this.inventoryService.recoverItem(dto, user?.userId ?? user?.id);
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async recoverItem(@Body() dto: RecoverItemDto, @Request() req: any) {
+    const user = req.user;
+    await this.inventoryService.recoverItem(dto, user?.userId ?? user?.id);
+    return { success: true };
   }
 
-  // list lost/damaged (admin)
-  @Get('loss/list')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'SUPER_ADMIN')
-  async list(@Query('productId') productId?: string, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.inventoryService.listLostDamaged({ productId, from, to });
+  @Get('list')
+  async listLostDamaged(
+    @Query('productId') productId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const items = await this.inventoryService.listLostDamaged({
+      productId,
+      from,
+      to,
+    });
+    return { success: true, data: items };
   }
 }

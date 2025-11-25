@@ -5,6 +5,7 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
 import Input from "../../components/form/input/InputField";
+import { BASE_URL } from "../../components/BaseUrl/config";
 
 export default function AddInventory() {
   const [loading, setLoading] = useState(false);
@@ -12,9 +13,11 @@ export default function AddInventory() {
   const [globalType, setGlobalType] = useState<"success" | "error" | "">("");
   const navigate = useNavigate();
 
-  // Inventories table fields
+  // Products (for select)
   const [products, setProducts] = useState<any[]>([]);
-  const [productId, setProductId] = useState<number | "">("");
+  const [productId, setProductId] = useState<string | "">("");
+
+  // Inventory numbers
   const [openingStock, setOpeningStock] = useState<number | "">("");
   const [stockIn, setStockIn] = useState<number | "">("");
   const [stockOut, setStockOut] = useState<number | "">("");
@@ -26,64 +29,28 @@ export default function AddInventory() {
 
   const parseNum = (val: any) => (val === "" ? 0 : Number(val));
 
-  // useEffect(() => {
-  //   const fetchProducts = async () => {
-  //     try {
-  //       const token = localStorage.getItem("token");
-  //       const res = await axios.get("http://localhost:5000/api/products", {
-  //         headers: { Authorization: `Bearer ${token}` },
-  //       });
-  //       if (res.data.success) {
-  //         setProducts(res.data.products || []);
-  //       }
-  //     } catch (err) {
-  //       console.error("Failed to fetch products", err);
-  //     }
-  //   };
-  //   fetchProducts();
-  // }, []);
-
   useEffect(() => {
-  const fetchProducts = async () => {
-    try {
-      const token = localStorage.getItem("token");
+    const fetchProducts = async () => {
+      try {
+        const resProducts = await axios.get(`${BASE_URL}products`, {});
 
-      // Fetch products
-      const resProducts = await axios.get("http://localhost:5000/api/products", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      // Fetch inventories
-      const resInventories = await axios.get("http://localhost:5000/api/inventories", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (resProducts.data.success && resInventories.data.success) {
-        const allProducts = resProducts.data.products || [];
-        const inventories = resInventories.data.data || [];
-        const inventoryProductIds = inventories.map(
-          (inv: any) => Number(inv.product_id)
-        );
-        const availableProducts = allProducts.filter(
-          (p: any) => !inventoryProductIds.includes(Number(p.id))
-        );
-        setProducts(availableProducts);
+        const allProducts =
+          resProducts.data.items || resProducts.data.data || [];
+        setProducts(allProducts);
+      } catch (err) {
+        console.error("Failed to fetch products", err);
       }
-    } catch (err) {
-      console.error("Failed to fetch products/inventories", err);
-    }
-  };
+    };
 
-  fetchProducts();
-}, []);
+    fetchProducts();
+  }, []);
 
-
-  // 🟢 Generic helper: clear error when user types/changes
+  // clear a field-specific error when user starts typing
   const clearError = (field: string) => {
     setErrors((prev) => {
-      const newErrors = { ...prev };
-      delete newErrors[field];
-      return newErrors;
+      const next = { ...prev };
+      delete next[field];
+      return next;
     });
   };
 
@@ -91,8 +58,10 @@ export default function AddInventory() {
     const newErrors: Record<string, string> = {};
 
     if (!productId) newErrors.productId = "Please select a product.";
-    if (openingStock === "") newErrors.openingStock = "Opening stock is required.";
+    if (openingStock === "")
+      newErrors.openingStock = "Opening stock is required.";
     if (stockIn === "") newErrors.stockIn = "Stock In is required.";
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -102,7 +71,7 @@ export default function AddInventory() {
     setGlobalMessage("");
     setGlobalType("");
 
-    if (!validateForm()) return; 
+    if (!validateForm()) return;
 
     setLoading(true);
     try {
@@ -115,7 +84,7 @@ export default function AddInventory() {
       }
 
       const payload = {
-        product_id: productId,
+        product_id: productId, // UUID (string)
         opening_stock: openingStock || 0,
         stock_in: stockIn || 0,
         stock_out: stockOut || 0,
@@ -123,7 +92,8 @@ export default function AddInventory() {
         damaged: damaged || 0,
       };
 
-      await axios.post("http://localhost:5000/api/inventories", payload, {
+      // POST /api/v1/inventories/items
+      await axios.post(`${BASE_URL}inventories/items`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -141,6 +111,7 @@ export default function AddInventory() {
 
       setTimeout(() => navigate("/inventory-list"), 1500);
     } catch (error) {
+      console.error("Failed to add inventory", error);
       setGlobalMessage("Failed to add inventory.");
       setGlobalType("error");
     } finally {
@@ -155,11 +126,13 @@ export default function AddInventory() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Product select */}
           <div>
-            <Label>Select Product <span style={{ color: "red" }}> *</span></Label>
+            <Label>
+              Select Product <span style={{ color: "red" }}> *</span>
+            </Label>
             <select
               value={productId}
               onChange={(e) => {
-                setProductId(Number(e.target.value));
+                setProductId(e.target.value); // UUID string
                 clearError("productId");
               }}
               className="w-full border border-gray-300 rounded-md p-2"
@@ -177,13 +150,16 @@ export default function AddInventory() {
           </div>
 
           <div>
-            <Label>Opening Stock<span style={{ color: "red" }}> *</span></Label>
+            <Label>
+              Opening Stock<span style={{ color: "red" }}> *</span>
+            </Label>
             <Input
               type="number"
               value={openingStock}
               onChange={(e) => {
                 clearError("openingStock");
-                setOpeningStock(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)));
+                const val = e.target.value;
+                setOpeningStock(val === "" ? "" : Math.max(0, Number(val)));
               }}
             />
             {errors.openingStock && (
@@ -192,7 +168,9 @@ export default function AddInventory() {
           </div>
 
           <div>
-            <Label>Stock In<span style={{ color: "red" }}> *</span></Label>
+            <Label>
+              Stock In<span style={{ color: "red" }}> *</span>
+            </Label>
             <Input
               type="number"
               value={stockIn}
@@ -201,8 +179,14 @@ export default function AddInventory() {
                 const val = e.target.value;
                 if (val === "") return setStockIn("");
                 const newVal = Number(val);
-                const total = newVal + parseNum(stockOut) + parseNum(missing) + parseNum(damaged);
-                if (total <= parseNum(openingStock)) setStockIn(Math.max(0, newVal));
+                const total =
+                  newVal +
+                  parseNum(stockOut) +
+                  parseNum(missing) +
+                  parseNum(damaged);
+                if (total <= parseNum(openingStock)) {
+                  setStockIn(Math.max(0, newVal));
+                }
               }}
             />
             {errors.stockIn && (
@@ -220,8 +204,14 @@ export default function AddInventory() {
                 const val = e.target.value;
                 if (val === "") return setStockOut("");
                 const newVal = Number(val);
-                const total = parseNum(stockIn) + newVal + parseNum(missing) + parseNum(damaged);
-                if (total <= parseNum(openingStock)) setStockOut(Math.max(0, newVal));
+                const total =
+                  parseNum(stockIn) +
+                  newVal +
+                  parseNum(missing) +
+                  parseNum(damaged);
+                if (total <= parseNum(openingStock)) {
+                  setStockOut(Math.max(0, newVal));
+                }
               }}
             />
             {errors.stockOut && (
@@ -239,8 +229,14 @@ export default function AddInventory() {
                 const val = e.target.value;
                 if (val === "") return setMissing("");
                 const newVal = Number(val);
-                const total = parseNum(stockIn) + parseNum(stockOut) + newVal + parseNum(damaged);
-                if (total <= parseNum(openingStock)) setMissing(Math.max(0, newVal));
+                const total =
+                  parseNum(stockIn) +
+                  parseNum(stockOut) +
+                  newVal +
+                  parseNum(damaged);
+                if (total <= parseNum(openingStock)) {
+                  setMissing(Math.max(0, newVal));
+                }
               }}
             />
             {errors.missing && (
@@ -258,8 +254,14 @@ export default function AddInventory() {
                 const val = e.target.value;
                 if (val === "") return setDamaged("");
                 const newVal = Number(val);
-                const total = parseNum(stockIn) + parseNum(stockOut) + parseNum(missing) + newVal;
-                if (total <= parseNum(openingStock)) setDamaged(Math.max(0, newVal));
+                const total =
+                  parseNum(stockIn) +
+                  parseNum(stockOut) +
+                  parseNum(missing) +
+                  newVal;
+                if (total <= parseNum(openingStock)) {
+                  setDamaged(Math.max(0, newVal));
+                }
               }}
             />
             {errors.damaged && (

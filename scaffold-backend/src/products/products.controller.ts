@@ -1,25 +1,51 @@
-import { Controller, Post, Body, Get, Query, Param, Put, Delete, ParseUUIDPipe } from '@nestjs/common';
+// src/products/products.controller.ts
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Query,
+  Param,
+  Put,
+  Delete,
+  ParseUUIDPipe,
+  UseInterceptors,
+  UploadedFiles,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import * as multer from 'multer';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 
 @Controller('products')
 export class ProductsController {
-  constructor(private svc: ProductsService) {}
+  constructor(private svc: ProductsService) { }
 
   @Post()
-  async create(@Body() dto: CreateProductDto) {
-    return this.svc.create(dto);
+  @UseInterceptors(
+    FilesInterceptor('images', 10, {
+      storage: multer.memoryStorage(),
+    }),
+  )
+  async create(
+    @Body() dto: CreateProductDto,
+    @UploadedFiles() files?: Express.Multer.File[],
+  ) {
+    return this.svc.create(dto, files);
   }
 
   @Get()
   async list(
     @Query('search') search?: string,
-    @Query('categoryId') categoryId?: string,
     @Query('page') page?: number,
-    @Query('limit') limit?: number
+    @Query('limit') limit?: number,
   ) {
-    return this.svc.findAll({ search, categoryId, page: Number(page), limit: Number(limit) });
+    return this.svc.findAll({
+      search,
+      page: Number(page),
+      limit: Number(limit),
+    });
   }
 
   @Get(':id')
@@ -28,8 +54,17 @@ export class ProductsController {
   }
 
   @Put(':id')
-  async update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateProductDto) {
-    return this.svc.update(id, dto);
+  @UseInterceptors(
+    FilesInterceptor('images', 10, {
+      storage: multer.memoryStorage(),
+    }),
+  )
+  async update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateProductDto,
+    @UploadedFiles() files?: Express.Multer.File[],
+  ) {
+    return this.svc.update(id, dto, files);
   }
 
   @Delete(':id')

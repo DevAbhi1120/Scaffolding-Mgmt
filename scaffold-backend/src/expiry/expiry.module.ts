@@ -4,7 +4,7 @@ import { ExpiryService } from './expiry.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VoidProtection } from '../voids/void.entity';
-import { InventoryItem } from '../database/entities/inventory_item.entity';
+import { InventoryItem } from '../database/entities/inventory-item.entity';
 
 @Module({
   imports: [ScheduleModule.forRoot(), NotificationsModule, TypeOrmModule.forFeature([VoidProtection, InventoryItem])],

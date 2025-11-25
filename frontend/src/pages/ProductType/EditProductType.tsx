@@ -6,15 +6,25 @@ import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
 import Input from "../../components/form/input/InputField";
 import FileInput from "../../components/form/input/FileInput";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
+
+interface ProductTypeResponse {
+  id: string;
+  name: string;
+  description?: string;
+  image?: string | null;
+}
 
 export default function EditProductType() {
-  const { id } = useParams(); 
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
+
   const [productTypeName, setProductType] = useState("");
+  const [description, setDescription] = useState("");
   const [thumbnailImage, setThumbnailImage] = useState<File | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -23,25 +33,31 @@ export default function EditProductType() {
     const fetchProductType = async () => {
       try {
         const token = localStorage.getItem("token");
-        const response = await axios.get(
-          `http://localhost:5000/api/productTypes/${id}`,
+        const response = await axios.get<ProductTypeResponse>(
+          `${BASE_URL}product-types/${id}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
         );
-        console.log("Fetched product type data:", response.data);
-        setProductType(response.data.name);
 
-        if (response.data.thumbnail_image) {
-          setPreviewImage(`http://localhost:5000/uploads/productType/${response.data.thumbnail_image}`);
+        const data = response.data;
+        setProductType(data.name);
+        setDescription(data.description || "");
+
+        if (data.image) {
+          const img = data.image.startsWith("http")
+            ? data.image
+            : `${BASE_IMAGE_URL}${data.image}`;
+          setPreviewImage(img);
         }
       } catch (error) {
+        console.error("Failed to fetch product type details.", error);
         setMessage("Failed to fetch product type details.");
         setMessageType("error");
       }
     };
 
-    fetchProductType();
+    if (id) fetchProductType();
   }, [id]);
 
   const clearError = (field: string) => {
@@ -54,16 +70,18 @@ export default function EditProductType() {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (productTypeName === "") newErrors.productTypeName = "Product type name is required.";
+    if (!productTypeName.trim())
+      newErrors.productTypeName = "Product type name is required.";
+    if (!description.trim()) newErrors.description = "Description is required.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-    
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setThumbnailImage(file);
-      setPreviewImage(URL.createObjectURL(file)); 
+      setPreviewImage(URL.createObjectURL(file));
     }
   };
 
@@ -74,50 +92,56 @@ export default function EditProductType() {
     setMessageType("");
 
     if (!validateForm()) {
-      return; 
+      setLoading(false);
+      return;
     }
 
     try {
       const token = localStorage.getItem("token");
       if (!token) {
         setMessage("Authentication token not found.");
+        setMessageType("error");
         setLoading(false);
         return;
       }
+
       const formData = new FormData();
-      formData.append("name", productTypeName);
+      formData.append("name", productTypeName.trim());
+      formData.append("description", description.trim());
       if (thumbnailImage) {
         formData.append("thumbnail_image", thumbnailImage);
       }
-      await axios.put(
-        `http://localhost:5000/api/productTypes/${id}`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+
+      await axios.put(`${BASE_URL}product-types/${id}`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
       setMessage("Product type updated successfully!");
       setMessageType("success");
       setTimeout(() => {
-        navigate("/product-type-list"); 
+        navigate("/product-type-list");
       }, 1500);
     } catch (error) {
+      console.error("Failed to update product type.", error);
       setMessage("Failed to update product type.");
       setMessageType("error");
     } finally {
       setLoading(false);
     }
   };
+
   return (
     <>
       <PageBreadcrumb pageTitle="Edit Product Type" />
       <ComponentCard title="Update input fields">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <Label htmlFor="input">Edit Product Type Name <span style={{ color: "red" }}>*</span></Label>
+            <Label htmlFor="input">
+              Edit Product Type Name <span style={{ color: "red" }}>*</span>
+            </Label>
             <Input
               type="text"
               id="input"
@@ -127,10 +151,32 @@ export default function EditProductType() {
                 setProductType(e.target.value);
               }}
             />
-            {errors.productTypeName && (   
-              <p className="text-red-600 text-sm mt-1">{errors.productTypeName}</p>
+            {errors.productTypeName && (
+              <p className="text-red-600 text-sm mt-1">
+                {errors.productTypeName}
+              </p>
             )}
           </div>
+
+          <div>
+            <Label htmlFor="description">
+              Description <span style={{ color: "red" }}>*</span>
+            </Label>
+            <textarea
+              id="description"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-transparent dark:border-gray-700 dark:text-white"
+              rows={4}
+              value={description}
+              onChange={(e) => {
+                clearError("description");
+                setDescription(e.target.value);
+              }}
+            />
+            {errors.description && (
+              <p className="text-red-600 text-sm mt-1">{errors.description}</p>
+            )}
+          </div>
+
           <div>
             <Label>Update Thumbnail</Label>
             <FileInput onChange={handleFileChange} className="custom-class" />
@@ -142,15 +188,17 @@ export default function EditProductType() {
               />
             )}
           </div>
+
           <div>
             <button
               type="submit"
-              className="px-6 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+              className="px-6 py-2 text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed"
               disabled={loading}
             >
               {loading ? "Updating..." : "Update"}
             </button>
           </div>
+
           {message && (
             <p
               className={`text-sm ${

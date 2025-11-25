@@ -14,13 +14,15 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
 
 import { TrashBinIcon, PencilIcon } from "../../icons";
 
 interface ProductType {
-  id: number;
+  id: string; // uuid
   name: string;
-  thumbnail_url?: string;
+  description?: string;
+  image?: string | null;
 }
 
 export default function ProductTypeList() {
@@ -31,15 +33,14 @@ export default function ProductTypeList() {
   const fetchProductTypes = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/api/productTypes/", {
+      const res = await axios.get(`${BASE_URL}product-types`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: token ? `Bearer ${token}` : "",
         },
       });
 
-      if (res.data.success) {
-        setProductTypes(res.data.data || []);
-      }
+      // backend: { items, total, page, limit }
+      setProductTypes(res.data.items || []);
     } catch (error) {
       console.error("Failed to fetch product types", error);
     }
@@ -49,11 +50,11 @@ export default function ProductTypeList() {
     fetchProductTypes();
   }, []);
 
-  const handleEdit = (id: number) => {
+  const handleEdit = (id: string) => {
     navigate(`/edit-product-type/${id}`);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     const result = await Swal.fire({
       title: "Are you sure?",
       text: "This action cannot be undone!",
@@ -64,30 +65,36 @@ export default function ProductTypeList() {
       confirmButtonText: "Yes, delete it!",
     });
 
-    if (result.isConfirmed) {
-      try {
-        const token = localStorage.getItem("token");
-        await axios.delete(`http://localhost:5000/api/productTypes/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+    if (!result.isConfirmed) return;
 
-        Swal.fire("Deleted!", "Category has been deleted.", "success");
-        setProductTypes(productTypes.filter((cat) => cat.id !== id));
-      } catch (error) {
-        console.error("Delete error:", error);
-        Swal.fire("Error!", "Something went wrong.", "error");
-      }
+    try {
+      const token = localStorage.getItem("token");
+      await axios.delete(`${BASE_URL}product-types/${id}`, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+      });
+
+      Swal.fire("Deleted!", "Product type has been deleted.", "success");
+      setProductTypes((prev) => prev.filter((pt) => pt.id !== id));
+    } catch (error) {
+      console.error("Delete error:", error);
+      Swal.fire("Error!", "Something went wrong.", "error");
     }
   };
 
-  console.log("Product Types:", productTypes);
   const filteredProductTypes = productTypes.filter((p) =>
-    `${p.name} || ""}`
+    `${p.name} ${p.description ?? ""}`
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
   );
+
+  const getThumbnailSrc = (pt: ProductType) => {
+    if (!pt.image) return "/images/no-image.png";
+    if (pt.image.startsWith("http")) return pt.image;
+    return `${BASE_IMAGE_URL}${pt.image}`;
+  };
+
   return (
     <>
       <PageMeta
@@ -118,7 +125,7 @@ export default function ProductTypeList() {
                       Thumbnail
                     </TableCell>
                     <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
-                      Name
+                      Name & Description
                     </TableCell>
                     <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
                       Actions
@@ -131,14 +138,21 @@ export default function ProductTypeList() {
                       <TableCell className="px-5 py-4 text-start">
                         <div className="w-12 h-12 rounded overflow-hidden bg-gray-100">
                           <img
-                            src={proType.thumbnail_url ? `${proType.thumbnail_url}` : "/images/no-image.png"}
+                            src={getThumbnailSrc(proType)}
                             alt={proType.name}
                             className="object-cover w-full h-full"
                           />
                         </div>
                       </TableCell>
                       <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
-                        {proType.name}
+                        <div className="flex flex-col">
+                          <span>{proType.name}</span>
+                          {proType.description && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                              {proType.description}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="px-5 py-4 text-start">
                         <div className="flex items-center gap-3">
@@ -160,6 +174,17 @@ export default function ProductTypeList() {
                       </TableCell>
                     </TableRow>
                   ))}
+
+                  {filteredProductTypes.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={3}
+                        className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                      >
+                        No product types found.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>

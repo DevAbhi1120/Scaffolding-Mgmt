@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsNumber, IsString, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class MarkLostDto {
   @IsUUID()
@@ -10,6 +10,5 @@ export class MarkLostDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
-  fee?: number; // lost fee to charge
+  fee?: number;
 }

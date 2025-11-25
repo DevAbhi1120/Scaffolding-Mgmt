@@ -6,81 +6,110 @@ import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
 import Input from "../../components/form/input/InputField";
 import FileInput from "../../components/form/input/FileInput";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
+
+interface Category {
+  id: string;
+  name: string;
+}
+
+interface ProductType {
+  id: string;
+  name: string;
+}
+
+interface ProductResponse {
+  id: string;
+  name: string;
+  unit: string;
+  stockQuantity: number;
+  price: number;
+  status: number;
+  description?: string;
+  categoryId?: string;
+  category?: Category;
+  productTypeId?: string;
+  productType?: ProductType;
+  images?: string[];
+}
 
 export default function EditProduct() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
-  const [categories, setCategories] = useState<any[]>([]);
-  const [categoryId, setCategoryId] = useState<number | "">("");
-  const [productTypes, setProductTypes] = useState<any[]>([]);
-  const [productTypeId, setProductTypeId] = useState<number | "">("");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
+
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [productTypeId, setProductTypeId] = useState<string>("");
+
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("");
   const [stockQty, setStockQty] = useState<number | "">("");
   const [price, setPrice] = useState<number | "">("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<number>(1);
-  const [thumbnailImage, setThumbnailImage] = useState<File | null>(null);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [newImages, setNewImages] = useState<File[]>([]);
+  const [previewFirstNew, setPreviewFirstNew] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Fetch categories
+  // Fetch categories & product types
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/api/categories", {
+        const res = await axios.get(`${BASE_URL}categories`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.data.success) {
-          setCategories(res.data.data || []);
-        }
+        const items = res.data.items ?? res.data.data ?? [];
+        setCategories(items);
       } catch (err) {
         console.error("Failed to fetch categories", err);
       }
     };
-    const fetchProductType = async () => {
+
+    const fetchProductTypes = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/api/productTypes", {
+        const res = await axios.get(`${BASE_URL}product-types`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (res.data.success) {
-          setProductTypes(res.data.data || []);
-        }
+        const items = res.data.items ?? res.data.data ?? [];
+        setProductTypes(items);
       } catch (err) {
-        console.error("Failed to fetch product type", err);
+        console.error("Failed to fetch product types", err);
       }
     };
+
     fetchCategories();
-    fetchProductType();
+    fetchProductTypes();
   }, []);
 
   const clearError = (field: string) => {
     setErrors((prev) => {
-      const newErrors = { ...prev };
-      delete newErrors[field];
-      return newErrors;
+      const next = { ...prev };
+      delete next[field];
+      return next;
     });
   };
 
-  // ✅ Validation function
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!categoryId) newErrors.categoryId = "Please select a category.";
-    if (!productTypeId) newErrors.productTypeId = "Please select a product type.";
+    if (!productTypeId)
+      newErrors.productTypeId = "Please select a product type.";
     if (name.trim() === "") newErrors.name = "Product name is required.";
     if (unit.trim() === "") newErrors.unit = "Unit is required.";
     if (stockQty === "" || Number(stockQty) <= 0)
       newErrors.stockQty = "Stock quantity must be greater than 0.";
-    // if (description.trim() === "")
-    //   newErrors.description = "Description is required.";
+    if (price === "" || Number(price) < 0)
+      newErrors.price = "Price is required.";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -89,25 +118,34 @@ export default function EditProduct() {
   // Fetch product details
   useEffect(() => {
     const fetchProduct = async () => {
+      if (!id) return;
+
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get(
-          `http://localhost:5000/api/products/${id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const res = await axios.get<ProductResponse>(
+          `${BASE_URL}products/${id}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
         );
 
         const product = res.data;
-        setCategoryId(product.category_id);
-        setProductTypeId(product.product_type_id);
+        setCategoryId(product.category?.id || product.categoryId || "");
+        setProductTypeId(
+          product.productType?.id || product.productTypeId || ""
+        );
         setName(product.name);
         setUnit(product.unit);
-        setStockQty(product.stock_quantity);
+        setStockQty(product.stockQuantity);
         setPrice(product.price);
-        setDescription(product.description);
+        setDescription(product.description || "");
         setStatus(product.status);
 
-        if (product.thumbnail_image) {
-          setPreviewImage(product.thumbnail_image);
+        if (product.images && product.images.length > 0) {
+          const normalized = product.images.map((img) =>
+            img.startsWith("http") ? img : `${BASE_IMAGE_URL}${img}`
+          );
+          setExistingImages(normalized);
         }
       } catch (error) {
         console.error("Failed to fetch product details", error);
@@ -115,14 +153,19 @@ export default function EditProduct() {
         setMessageType("error");
       }
     };
+
     fetchProduct();
   }, [id]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setThumbnailImage(file);
-      setPreviewImage(URL.createObjectURL(file));
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const arr = Array.from(files);
+      setNewImages(arr);
+      setPreviewFirstNew(URL.createObjectURL(arr[0]));
+    } else {
+      setNewImages([]);
+      setPreviewFirstNew(null);
     }
   };
 
@@ -131,9 +174,7 @@ export default function EditProduct() {
     setMessage("");
     setMessageType("");
 
-    if (!validateForm()) {
-      return; 
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
     try {
@@ -146,19 +187,20 @@ export default function EditProduct() {
       }
 
       const formData = new FormData();
-      formData.append("category_id", String(categoryId));
-      formData.append("product_type_id", String(productTypeId));
+      formData.append("categoryId", categoryId);
+      formData.append("productTypeId", productTypeId);
       formData.append("name", name);
       formData.append("unit", unit);
-      formData.append("stock_quantity", String(stockQty));
+      formData.append("stockQuantity", String(stockQty));
       formData.append("price", String(price));
       formData.append("description", description);
       formData.append("status", String(status));
-      if (thumbnailImage) {
-        formData.append("thumbnail_image", thumbnailImage);
-      }
 
-      await axios.put(`http://localhost:5000/api/products/${id}`, formData, {
+      newImages.forEach((file) => {
+        formData.append("images", file); // matches FilesInterceptor('images')
+      });
+
+      await axios.put(`${BASE_URL}products/${id}`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -194,7 +236,7 @@ export default function EditProduct() {
               id="category"
               value={categoryId}
               onChange={(e) => {
-                setCategoryId(Number(e.target.value));
+                setCategoryId(e.target.value);
                 clearError("categoryId");
               }}
               className="w-full border border-gray-300 rounded-md p-2"
@@ -210,30 +252,35 @@ export default function EditProduct() {
               <p className="text-red-600 text-sm mt-1">{errors.categoryId}</p>
             )}
           </div>
-            
+
+          {/* Product Type */}
           <div>
-            <Label htmlFor="productTypeId">Select Product Type <span style={{ color: "red" }}>*</span></Label>
+            <Label htmlFor="productTypeId">
+              Select Product Type <span style={{ color: "red" }}>*</span>
+            </Label>
             <select
               id="productTypeId"
               value={productTypeId}
               onChange={(e) => {
-                setProductTypeId(Number(e.target.value));
+                setProductTypeId(e.target.value);
                 clearError("productTypeId");
               }}
               className="w-full border border-gray-300 rounded-md p-2"
             >
               <option value="">-- Select Product Type --</option>
-              {productTypes.map((ProType) => (
-                <option key={ProType.id} value={ProType.id}>
-                  {ProType.name}
+              {productTypes.map((pt) => (
+                <option key={pt.id} value={pt.id}>
+                  {pt.name}
                 </option>
               ))}
             </select>
             {errors.productTypeId && (
-              <p className="text-red-600 text-sm mt-1">{errors.productTypeId}</p>
+              <p className="text-red-600 text-sm mt-1">
+                {errors.productTypeId}
+              </p>
             )}
           </div>
-          
+
           {/* Name */}
           <div>
             <Label htmlFor="name">
@@ -263,7 +310,7 @@ export default function EditProduct() {
               id="price"
               value={price}
               onChange={(e) => {
-                setPrice(Number(e.target.value));
+                setPrice(e.target.value ? Number(e.target.value) : "");
                 clearError("price");
               }}
             />
@@ -282,7 +329,7 @@ export default function EditProduct() {
               id="stockQty"
               value={stockQty}
               onChange={(e) => {
-                setStockQty(Number(e.target.value));
+                setStockQty(e.target.value ? Number(e.target.value) : "");
                 clearError("stockQty");
               }}
             />
@@ -312,9 +359,7 @@ export default function EditProduct() {
 
           {/* Description */}
           <div>
-            <Label htmlFor="description">
-              Description 
-            </Label>
+            <Label htmlFor="description">Description</Label>
             <textarea
               id="description"
               value={description}
@@ -344,24 +389,41 @@ export default function EditProduct() {
             </select>
           </div>
 
-          {/* Thumbnail */}
+          {/* Existing Images */}
+          {existingImages.length > 0 && (
+            <div>
+              <Label>Existing Images</Label>
+              <div className="flex flex-wrap gap-3 mt-2">
+                {existingImages.map((img, idx) => (
+                  <img
+                    key={idx}
+                    src={img}
+                    alt={`Product image ${idx + 1}`}
+                    className="w-20 h-20 object-cover rounded-md border"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upload New Images */}
           <div>
-            <Label>Upload Thumbnail</Label>
-            {previewImage && (
+            <Label>Upload New Images (optional)</Label>
+            {previewFirstNew && (
               <img
-                src={previewImage}
-                alt="Preview"
+                src={previewFirstNew}
+                alt="New Preview"
                 className="w-32 h-32 object-cover mb-2 rounded-md"
               />
             )}
-            <FileInput onChange={handleFileChange} />
+            <FileInput onChange={handleFileChange} multiple />
           </div>
 
           {/* Submit */}
           <div>
             <button
               type="submit"
-              className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
+              className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
               disabled={loading}
             >
               {loading ? "Updating..." : "Update"}

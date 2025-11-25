@@ -4,7 +4,7 @@ import { NotificationsService } from '../notifications/notification.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual } from 'typeorm';
 import { VoidProtection } from '../voids/void.entity';
-import { InventoryItem } from '../database/entities/inventory_item.entity';
+import { InventoryItem } from '../database/entities/inventory-item.entity';
 
 @Injectable()
 export class ExpiryService {

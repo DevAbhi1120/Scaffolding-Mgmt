@@ -7,9 +7,9 @@ import Label from "../components/form/Label";
 import Input from "../components/form/input/InputField";
 import Checkbox from "../components/form/input/Checkbox";
 import Button from "../components/ui/button/Button";
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from "../context/AuthContext";
+import { BASE_URL } from "../components/BaseUrl/config";
 import axios from "axios";
-
 
 export default function LoginIn() {
   const navigate = useNavigate(); // for redirect
@@ -24,16 +24,11 @@ export default function LoginIn() {
 
   const { login, isAuthReady, user } = useContext(AuthContext);
 
-
-
-    // ✅ If already logged in, redirect to /dashboard
   useEffect(() => {
     if (isAuthReady && user) {
-       navigate('/', { replace: true });
+      navigate("/", { replace: true });
     }
   }, [user, isAuthReady, navigate]);
-
-
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -46,25 +41,24 @@ export default function LoginIn() {
     setLoading(true);
 
     try {
-      const res = await axios.post("http://localhost:5000/api/auth/login", formData);
+      const res = await axios.post(`${BASE_URL}auth/login`, formData);
 
-      // ✅ Store the token and update context
-      login(res.data.token); // this sets user in context and saves token in localStorage
+      login(res.data.access_token);
 
-      // ✅ Redirect to home or dashboard
       navigate("/");
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || "Login failed");
     } finally {
       setLoading(false);
     }
-  }
-
-  
+  };
 
   return (
     <>
-      <PageMeta title="SignIn | Scaffolding Management" description="Scaffolding Management" />
+      <PageMeta
+        title="SignIn | Scaffolding Management"
+        description="Scaffolding Management"
+      />
       <AuthLayout>
         <div className="flex flex-col flex-1">
           <div className="w-full max-w-md pt-10 mx-auto">
@@ -93,11 +87,11 @@ export default function LoginIn() {
                       Email <span className="text-error-500">*</span>
                     </Label>
                     <Input
-                        type="email"
-                        name="email" 
-                        placeholder="info@gmail.com"
-                        value={formData.email}
-                        onChange={handleInputChange}
+                      type="email"
+                      name="email"
+                      placeholder="info@gmail.com"
+                      value={formData.email}
+                      onChange={handleInputChange}
                     />
                   </div>
                   <div>
@@ -105,13 +99,13 @@ export default function LoginIn() {
                       Password <span className="text-error-500">*</span>
                     </Label>
                     <div className="relative">
-                     <Input
+                      <Input
                         type={showPassword ? "text" : "password"}
-                        name="password" 
+                        name="password"
                         placeholder="Enter your password"
                         value={formData.password}
                         onChange={handleInputChange}
-                        />
+                      />
                       <span
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2"
@@ -139,10 +133,17 @@ export default function LoginIn() {
                     </Link>
                   </div>
 
-                  {errorMsg && <p className="text-sm text-red-500">{errorMsg}</p>}
+                  {errorMsg && (
+                    <p className="text-sm text-red-500">{errorMsg}</p>
+                  )}
 
                   <div>
-                    <Button type="submit" className="w-full" size="sm" disabled={loading}>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      size="sm"
+                      disabled={loading}
+                    >
                       {loading ? "Signing in..." : "Sign in"}
                     </Button>
                   </div>
@@ -151,7 +152,13 @@ export default function LoginIn() {
 
               <div className="mt-5">
                 <p className="text-sm font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start">
-                  Don&apos;t have an account? Contact Support
+                  Don&apos;t have an account?{" "}
+                  <Link
+                    to="/signup"
+                    className="text-sm text-brand-500 hover:text-brand-600 dark:text-brand-400"
+                  >
+                    SignUp
+                  </Link>
                 </p>
               </div>
             </div>

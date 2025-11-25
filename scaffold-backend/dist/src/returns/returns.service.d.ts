@@ -1,6 +1,6 @@
 import { Repository, DataSource } from 'typeorm';
 import { ReturnEvent } from './return-event.entity';
-import { InventoryItem } from '../database/entities/inventory_item.entity';
+import { InventoryItem } from '../database/entities/inventory-item.entity';
 import { ReturnItemsDto } from './dto/return-items.dto';
 import { BillingService } from '../billing/billing.service';
 import { NotificationsService } from '../notifications/notification.service';

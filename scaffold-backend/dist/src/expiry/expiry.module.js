@@ -13,7 +13,7 @@ const expiry_service_1 = require("./expiry.service");
 const notifications_module_1 = require("../notifications/notifications.module");
 const typeorm_1 = require("@nestjs/typeorm");
 const void_entity_1 = require("../voids/void.entity");
-const inventory_item_entity_1 = require("../database/entities/inventory_item.entity");
+const inventory_item_entity_1 = require("../database/entities/inventory-item.entity");
 let ExpiryModule = class ExpiryModule {
 };
 exports.ExpiryModule = ExpiryModule;

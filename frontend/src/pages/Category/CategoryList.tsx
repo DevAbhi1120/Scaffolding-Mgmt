@@ -6,7 +6,6 @@ import Swal from "sweetalert2";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
-
 import {
   Table,
   TableBody,
@@ -14,13 +13,15 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
 
 import { TrashBinIcon, PencilIcon } from "../../icons";
 
 interface Category {
-  id: number;
+  id: string; // UUID from backend
   name: string;
-  thumbnail_url?: string;
+  description?: string;
+  thumbnailImage?: string | null; // matches entity field
 }
 
 export default function CategoryList() {
@@ -30,16 +31,14 @@ export default function CategoryList() {
 
   const fetchCategories = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/api/categories/", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const res = await axios.get(`${BASE_URL}categories`, {
+        // if you need auth:
+        // headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
 
-      if (res.data.success) {
-        setCategories(res.data.data || []);
-      }
+      // service returns: { items, total, page, limit }
+      const items: Category[] = res.data.items || [];
+      setCategories(items);
     } catch (error) {
       console.error("Failed to fetch categories", error);
     }
@@ -49,11 +48,11 @@ export default function CategoryList() {
     fetchCategories();
   }, []);
 
-  const handleEdit = (id: number) => {
+  const handleEdit = (id: string) => {
     navigate(`/edit-category/${id}`);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     const result = await Swal.fire({
       title: "Are you sure?",
       text: "This action cannot be undone!",
@@ -64,29 +63,40 @@ export default function CategoryList() {
       confirmButtonText: "Yes, delete it!",
     });
 
-    if (result.isConfirmed) {
-      try {
-        const token = localStorage.getItem("token");
-        await axios.delete(`http://localhost:5000/api/categories/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+    if (!result.isConfirmed) return;
 
-        Swal.fire("Deleted!", "Category has been deleted.", "success");
-        setCategories(categories.filter((cat) => cat.id !== id));
-      } catch (error) {
-        console.error("Delete error:", error);
-        Swal.fire("Error!", "Something went wrong.", "error");
-      }
+    try {
+      const token = localStorage.getItem("token");
+
+      await axios.delete(`${BASE_URL}categories/${id}`, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+      });
+
+      await Swal.fire("Deleted!", "Category has been deleted.", "success");
+
+      // update list
+      setCategories((prev) => prev.filter((cat) => cat.id !== id));
+    } catch (error) {
+      console.error("Delete error:", error);
+      Swal.fire("Error!", "Something went wrong.", "error");
     }
   };
 
-  const filteredCategories = categories.filter((p) =>
-    `${p.name} || ""} ${p.unit}`
+  const filteredCategories = categories.filter((c) =>
+    `${c.name} ${c.description ?? ""}`
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
   );
+
+  const getThumbnailSrc = (cat: Category) => {
+    if (!cat.thumbnailImage) return "/images/no-image.png";
+    // if backend already returns full URL, use that; otherwise prefix with BASE_IMAGE_URL
+    if (cat.thumbnailImage.startsWith("http")) return cat.thumbnailImage;
+    return `${BASE_IMAGE_URL}${cat.thumbnailImage}`;
+  };
+
   return (
     <>
       <PageMeta
@@ -128,16 +138,23 @@ export default function CategoryList() {
                   {filteredCategories.map((cat) => (
                     <TableRow key={cat.id}>
                       <TableCell className="px-5 py-4 text-start">
-                        <div className="w-12 h-12 rounded overflow-hidden bg-gray-100">
+                        <div className="w-20 h-20 rounded overflow-hidden bg-gray-100">
                           <img
-                            src={cat.thumbnail_url ? `${cat.thumbnail_url}` : "/images/no-image.png"}
+                            src={getThumbnailSrc(cat)}
                             alt={cat.name}
                             className="object-cover w-full h-full"
                           />
                         </div>
                       </TableCell>
                       <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
-                        {cat.name}
+                        <div className="flex flex-col">
+                          <span>{cat.name}</span>
+                          {cat.description && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                              {cat.description}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="px-5 py-4 text-start">
                         <div className="flex items-center gap-3">
@@ -159,6 +176,17 @@ export default function CategoryList() {
                       </TableCell>
                     </TableRow>
                   ))}
+
+                  {filteredCategories.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={3}
+                        className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                      >
+                        No categories found.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>

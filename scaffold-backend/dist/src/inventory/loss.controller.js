@@ -12,77 +12,79 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InventoryLossController = void 0;
+exports.LossController = void 0;
 const common_1 = require("@nestjs/common");
 const inventory_service_1 = require("./inventory.service");
-const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
-const roles_guard_1 = require("../common/guards/roles.guard");
-const roles_decorator_1 = require("../common/decorators/roles.decorator");
 const mark_damaged_dto_1 = require("./dto/mark-damaged.dto");
 const mark_lost_dto_1 = require("./dto/mark-lost.dto");
 const recover_item_dto_1 = require("./dto/recover-item.dto");
-let InventoryLossController = class InventoryLossController {
+let LossController = class LossController {
     constructor(inventoryService) {
         this.inventoryService = inventoryService;
     }
     async markDamaged(dto, req) {
         const user = req.user;
-        return this.inventoryService.markDamaged(dto, user?.userId ?? user?.id);
+        await this.inventoryService.markDamaged(dto, user?.userId ?? user?.id);
+        return { success: true };
     }
     async markLost(dto, req) {
         const user = req.user;
-        return this.inventoryService.markLost(dto, user?.userId ?? user?.id);
+        await this.inventoryService.markLost(dto, user?.userId ?? user?.id);
+        return { success: true };
     }
-    async recover(dto, req) {
+    async recoverItem(dto, req) {
         const user = req.user;
-        return this.inventoryService.recoverItem(dto, user?.userId ?? user?.id);
+        await this.inventoryService.recoverItem(dto, user?.userId ?? user?.id);
+        return { success: true };
     }
-    async list(productId, from, to) {
-        return this.inventoryService.listLostDamaged({ productId, from, to });
+    async listLostDamaged(productId, from, to) {
+        const items = await this.inventoryService.listLostDamaged({
+            productId,
+            from,
+            to,
+        });
+        return { success: true, data: items };
     }
 };
-exports.InventoryLossController = InventoryLossController;
+exports.LossController = LossController;
 __decorate([
-    (0, common_1.Post)('mark-damaged'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Post)('damaged'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Body)()),
-    __param(1, (0, common_1.Req)()),
+    __param(1, (0, common_1.Request)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [mark_damaged_dto_1.MarkDamagedDto, Object]),
     __metadata("design:returntype", Promise)
-], InventoryLossController.prototype, "markDamaged", null);
+], LossController.prototype, "markDamaged", null);
 __decorate([
-    (0, common_1.Post)('mark-lost'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Post)('lost'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Body)()),
-    __param(1, (0, common_1.Req)()),
+    __param(1, (0, common_1.Request)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [mark_lost_dto_1.MarkLostDto, Object]),
     __metadata("design:returntype", Promise)
-], InventoryLossController.prototype, "markLost", null);
+], LossController.prototype, "markLost", null);
 __decorate([
     (0, common_1.Post)('recover'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('ADMIN', 'SUPER_ADMIN'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Body)()),
-    __param(1, (0, common_1.Req)()),
+    __param(1, (0, common_1.Request)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [recover_item_dto_1.RecoverItemDto, Object]),
     __metadata("design:returntype", Promise)
-], InventoryLossController.prototype, "recover", null);
+], LossController.prototype, "recoverItem", null);
 __decorate([
-    (0, common_1.Get)('loss/list'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('ADMIN', 'SUPER_ADMIN'),
+    (0, common_1.Get)('list'),
     __param(0, (0, common_1.Query)('productId')),
     __param(1, (0, common_1.Query)('from')),
     __param(2, (0, common_1.Query)('to')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", Promise)
-], InventoryLossController.prototype, "list", null);
-exports.InventoryLossController = InventoryLossController = __decorate([
-    (0, common_1.Controller)('inventory'),
+], LossController.prototype, "listLostDamaged", null);
+exports.LossController = LossController = __decorate([
+    (0, common_1.Controller)('inventories/loss'),
     __metadata("design:paramtypes", [inventory_service_1.InventoryService])
-], InventoryLossController);
+], LossController);
 //# sourceMappingURL=loss.controller.js.map

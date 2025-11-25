@@ -6,6 +6,7 @@ import Swal from "sweetalert2";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
 
 import {
   Table,
@@ -17,15 +18,22 @@ import {
 
 import { TrashBinIcon, PencilIcon } from "../../icons";
 
+interface ProductCategory {
+  id: string;
+  name: string;
+}
+
 interface Product {
-  id: number;
-  category_id: number;
-  category_name?: string; // backend se join karke bhejna best hoga
+  id: string;
   name: string;
   unit: string;
-  stock_quantity: number;
-  thumbnail_image?: string;
+  stockQuantity: number;
   status: number;
+  price?: number;
+  description?: string;
+  categoryId?: string;
+  category?: ProductCategory;
+  images?: string[]; // array of URLs or /uploads paths
 }
 
 export default function ProductList() {
@@ -36,13 +44,16 @@ export default function ProductList() {
   const fetchProducts = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/api/products", {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await axios.get(`${BASE_URL}products`, {
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
       });
-      console.log("Products from API:", res.data.products);
-      if (res.data.success) {
-        setProducts(res.data.products || []);
-      }
+
+      // backend: { items, total, page, limit } OR older { products }
+      const items =
+        res.data.items ??
+        res.data.products ??
+        (Array.isArray(res.data) ? res.data : []);
+      setProducts(items || []);
     } catch (error) {
       console.error("Failed to fetch products", error);
     }
@@ -52,11 +63,11 @@ export default function ProductList() {
     fetchProducts();
   }, []);
 
-  const handleEdit = (id: number) => {
+  const handleEdit = (id: string) => {
     navigate(`/edit-product/${id}`);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     const result = await Swal.fire({
       title: "Are you sure?",
       text: "This action cannot be undone!",
@@ -67,32 +78,37 @@ export default function ProductList() {
       confirmButtonText: "Yes, delete it!",
     });
 
-    if (result.isConfirmed) {
-      console.log("Deleting product with ID:", result);
-      try {
-        const token = localStorage.getItem("token");
-        await axios.delete(`http://localhost:5000/api/products/${id}/permanentDelete`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+    if (!result.isConfirmed) return;
 
-        Swal.fire("Deleted!", "Product has been deleted.", "success");
-        setProducts(products.filter((p) => p.id !== id));
-      } catch (error) {
-        console.error("Delete error:", error);
-        Swal.fire("Error!", "Something went wrong.", "error");
-      }
+    try {
+      const token = localStorage.getItem("token");
+      await axios.delete(`${BASE_URL}products/${id}`, {
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+
+      Swal.fire("Deleted!", "Product has been deleted.", "success");
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+    } catch (error) {
+      console.error("Delete error:", error);
+      Swal.fire("Error!", "Something went wrong.", "error");
     }
   };
 
   const filteredProducts = products.filter((p) =>
-    `${p.name} ${p.category_name || ""} ${p.unit}`
+    `${p.name} ${p.category?.name || ""} ${p.unit}`
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
   );
 
+  const getThumbnailSrc = (p: Product) => {
+    const url = p.images?.[0];
+    if (!url) return "/images/no-image.png";
+    if (url.startsWith("http")) return url;
+    return `${BASE_IMAGE_URL}${url}`;
+  };
+
   return (
     <>
-    
       <PageMeta
         title="Product List | Scaffolding Management"
         description="All products"
@@ -117,13 +133,27 @@ export default function ProductList() {
               <Table>
                 <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                   <TableRow>
-                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">Image</TableCell>
-                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">Name</TableCell>
-                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">Category</TableCell>
-                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">Unit</TableCell>
-                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">Stock Qty</TableCell>
-                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">Status</TableCell>
-                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">Actions</TableCell>
+                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
+                      Image
+                    </TableCell>
+                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
+                      Name
+                    </TableCell>
+                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
+                      Category
+                    </TableCell>
+                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
+                      Unit
+                    </TableCell>
+                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
+                      Stock Qty
+                    </TableCell>
+                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
+                      Status
+                    </TableCell>
+                    <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
+                      Actions
+                    </TableCell>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
@@ -132,7 +162,7 @@ export default function ProductList() {
                       <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
                         <div className="w-12 h-12 rounded overflow-hidden bg-gray-100">
                           <img
-                            src={p.thumbnail_image || "/images/no-image.png"}
+                            src={getThumbnailSrc(p)}
                             alt={p.name}
                             className="object-cover w-full h-full"
                           />
@@ -142,19 +172,23 @@ export default function ProductList() {
                         {p.name}
                       </TableCell>
                       <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
-                        {p.category_name || p.category_id}
+                        {p.category?.name || "--"}
                       </TableCell>
                       <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
                         {p.unit}
                       </TableCell>
                       <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
-                        {p.stock_quantity}
+                        {p.stockQuantity}
                       </TableCell>
                       <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
                         {p.status === 1 ? (
-                          <span className="text-green-600 font-semibold">Active</span>
+                          <span className="text-green-600 font-semibold">
+                            Active
+                          </span>
                         ) : (
-                          <span className="text-red-600 font-semibold">Inactive</span>
+                          <span className="text-red-600 font-semibold">
+                            Inactive
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
@@ -177,6 +211,17 @@ export default function ProductList() {
                       </TableCell>
                     </TableRow>
                   ))}
+
+                  {filteredProducts.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                      >
+                        No products found.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>

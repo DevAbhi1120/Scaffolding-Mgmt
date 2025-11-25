@@ -1,29 +1,26 @@
 import { Product } from './product.entity';
-import { Order } from './order.entity';
-export declare enum InventoryStatus {
-    IN_STORE = "IN_STORE",
-    ASSIGNED = "ASSIGNED",
-    BROKEN = "BROKEN",
-    OUT_FOR_REPAIR = "OUT_FOR_REPAIR"
-}
+import { InventoryStatus } from '../../inventory/enums/inventory-status.enum';
+import { InventoryCondition } from '../../inventory/enums/inventory-condition.enum';
 export declare class InventoryItem {
     id: string;
-    productId: string;
     product: Product;
-    serialNumber?: string | null;
-    siteAddress?: string | null;
-    codeNo?: string | null;
-    expiryDate?: Date | null;
+    productId: string;
+    serialNumber?: string;
     status: InventoryStatus;
+    condition?: InventoryCondition;
+    damagedAt?: Date;
+    damageNotes?: string;
+    damageFee?: number;
+    lostAt?: Date;
+    lostNotes?: string;
+    lostFee?: number;
+    deletedAt?: Date;
     assignedToOrderId?: string | null;
-    assignedToOrder?: Order | null;
-    condition?: string | null;
-    damagedAt?: Date | null;
-    damageNotes?: string | null;
-    damageFee?: number | null;
-    lostAt?: Date | null;
-    lostNotes?: string | null;
-    lostFee?: number | null;
+    siteAddress?: string;
+    codeNo?: string;
+    expiryDate?: Date;
+    extra?: any;
     createdAt: Date;
-    deletedAt?: Date | null;
+    updatedAt: Date;
 }
+export { InventoryStatus, InventoryCondition };

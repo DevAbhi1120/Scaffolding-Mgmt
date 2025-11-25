@@ -3,9 +3,8 @@ export declare class User {
     id: string;
     name: string;
     email: string;
-    phone: string;
     passwordHash: string;
     role: Role;
-    createdAt: Date;
-    updatedAt: Date;
+    phone?: string;
+    status: number;
 }

@@ -31,6 +31,7 @@ const audit_interceptor_1 = require("./common/interceptors/audit.interceptor");
 const core_1 = require("@nestjs/core");
 const typeorm_1 = require("@nestjs/typeorm");
 const returns_module_1 = require("./returns/returns.module");
+const product_types_module_1 = require("./product-types/product-types.module");
 const audit_log_entity_1 = require("./common/entities/audit-log.entity");
 let AppModule = class AppModule {
 };
@@ -45,12 +46,13 @@ exports.AppModule = AppModule = __decorate([
             jobs_module_1.JobsModule,
             builders_module_1.BuildersModule,
             categories_module_1.CategoriesModule,
+            product_types_module_1.ProductTypesModule,
             products_module_1.ProductsModule,
-            orders_module_1.OrdersModule,
             inventory_module_1.InventoryModule,
-            files_module_1.FilesModule,
-            notifications_module_1.NotificationsModule,
+            orders_module_1.OrdersModule,
             checklists_module_1.ChecklistsModule,
+            notifications_module_1.NotificationsModule,
+            files_module_1.FilesModule,
             swms_module_1.SwmsModule,
             reports_module_1.ReportsModule,
             schedule_1.ScheduleModule.forRoot(),

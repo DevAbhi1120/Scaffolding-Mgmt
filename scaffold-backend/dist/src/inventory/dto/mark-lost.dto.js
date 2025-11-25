@@ -26,7 +26,6 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
 ], MarkLostDto.prototype, "fee", void 0);
 //# sourceMappingURL=mark-lost.dto.js.map

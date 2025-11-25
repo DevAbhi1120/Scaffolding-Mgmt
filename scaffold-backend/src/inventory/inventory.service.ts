@@ -1,317 +1,529 @@
+// src/inventory/inventory.service.ts
 import {
-  Injectable,
-  NotFoundException,
   BadRequestException,
-  ConflictException,
+  Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, EntityManager, DataSource, In } from 'typeorm';
-import { InventoryItem, InventoryStatus } from '../database/entities/inventory_item.entity';
-import { InventoryMovement, MovementType } from '../database/entities/inventory_movement.entity';
-import { Product } from '../database/entities/product.entity';
-import { CreateInventoryItemDto } from './dto/create-item.dto';
-import { InventoryMovementDto } from './dto/movement.dto';
-import { AssignItemsDto } from './dto/assign-items.dto';
+import {
+  DataSource,
+  EntityManager,
+  Repository,
+} from 'typeorm';
+import {
+  InventoryItem,
+  InventoryStatus,
+  InventoryCondition,
+} from '../database/entities/inventory-item.entity';
+import {
+  InventoryMovement,
+  MovementType,
+  MovementReason,
+  MovementReferenceType,
+} from '../database/entities/inventory-movement.entity';
+import { CreateInventoryFromFormDto } from './dto/create-inventory-from-form.dto';
 import { MarkDamagedDto } from './dto/mark-damaged.dto';
 import { MarkLostDto } from './dto/mark-lost.dto';
 import { RecoverItemDto } from './dto/recover-item.dto';
-import { BillingService } from '../billing/billing.service';
+
+export interface ProductInventorySummary {
+  productId: string;
+  openingStock: number;
+  stockIn: number;
+  stockOut: number;
+  stockBalance: number;
+}
 
 @Injectable()
 export class InventoryService {
   constructor(
-    private dataSource: DataSource,
     @InjectRepository(InventoryItem)
-    private itemRepo: Repository<InventoryItem>,
+    private readonly itemsRepo: Repository<InventoryItem>,
     @InjectRepository(InventoryMovement)
-    private movRepo: Repository<InventoryMovement>,
-    @InjectRepository(Product)
-    private productRepo: Repository<Product>,
-    private billingService: BillingService, // ensure BillingModule imported or use forwardRef
+    private readonly movementsRepo: Repository<InventoryMovement>,
+    private readonly dataSource: DataSource,
   ) { }
 
-  async reserveAvailableItems(manager: EntityManager, productId: string, qty: number): Promise<InventoryItem[]> {
-    if (!productId) throw new BadRequestException('productId required');
-    if (!qty || qty <= 0) throw new BadRequestException('qty must be > 0');
+  // ====== HELPERS ======
 
-    const qb = manager.createQueryBuilder(InventoryItem, 'i')
-      .setLock('pessimistic_write') // FOR UPDATE
-      .where('i.productId = :productId', { productId })
-      .andWhere('i.status = :status', { status: InventoryStatus.IN_STORE })
-      .orderBy('i.createdAt', 'ASC')
-      .limit(qty);
+  private async getProductSummaryInternal(
+    productId: string,
+  ): Promise<ProductInventorySummary> {
+    const raw = await this.movementsRepo
+      .createQueryBuilder('m')
+      .select('COALESCE(SUM(m.quantity), 0)', 'total')
+      .addSelect(
+        `
+        COALESCE(
+          SUM(
+            CASE 
+              WHEN m.movementType = :inType 
+               AND (m.referenceType IS NULL OR m.referenceType != :systemRef)
+              THEN m.quantity 
+              ELSE 0 
+            END
+          ),
+        0)
+      `,
+        'inQty',
+      )
+      .addSelect(
+        `
+        COALESCE(
+          SUM(
+            CASE 
+              WHEN m.movementType = :outType 
+              THEN ABS(m.quantity) 
+              ELSE 0 
+            END
+          ),
+        0)
+      `,
+        'outQty',
+      )
+      .addSelect(
+        `
+        COALESCE(
+          SUM(
+            CASE 
+              WHEN m.referenceType = :systemRef 
+              THEN m.quantity 
+              ELSE 0 
+            END
+          ),
+        0)
+      `,
+        'openingQty',
+      )
+      .where('m.productId = :productId', { productId })
+      .setParameters({
+        inType: MovementType.IN,
+        outType: MovementType.OUT,
+        systemRef: MovementReferenceType.SYSTEM,
+      })
+      .getRawOne<{
+        total: string | null;
+        inQty: string | null;
+        outQty: string | null;
+        openingQty: string | null;
+      }>();
 
-    return await qb.getMany();
+    const total = Number(raw?.total || 0);
+    const stockIn = Number(raw?.inQty || 0);
+    const stockOut = Number(raw?.outQty || 0);
+    const openingStock = Number(raw?.openingQty || 0);
+
+    return {
+      productId,
+      openingStock,
+      stockIn,
+      stockOut,
+      stockBalance: total,
+    };
   }
 
-  async assignItemsToOrderWithManager(manager: EntityManager, itemIds: string[], orderId: string) {
-    if (!itemIds || itemIds.length === 0) throw new BadRequestException('No items provided to assign');
+  // ====== PUBLIC API ======
 
-    await manager
-      .createQueryBuilder()
-      .update(InventoryItem)
-      .set({ assignedToOrderId: orderId, status: InventoryStatus.ASSIGNED })
-      .whereInIds(itemIds)
-      .execute();
-
-    return manager.findByIds(InventoryItem, itemIds);
+  async getProductSummary(
+    productId: string,
+  ): Promise<ProductInventorySummary> {
+    return this.getProductSummaryInternal(productId);
   }
 
-  async releaseItemsToStoreWithManager(manager: EntityManager, itemIds: string[]) {
-    if (!itemIds || itemIds.length === 0) return;
+  /**
+   * Called from React "Add Inventory" form: POST /api/v1/inventories/items
+   */
+  async createFromForm(
+    dto: CreateInventoryFromFormDto,
+    userId?: string,
+  ): Promise<ProductInventorySummary> {
+    const {
+      product_id,
+      opening_stock,
+      stock_in,
+      stock_out = 0,
+      missing = 0,
+      damaged = 0,
+    } = dto;
 
-    await manager
-      .createQueryBuilder()
-      .update(InventoryItem)
-      .set({ assignedToOrderId: null, status: InventoryStatus.IN_STORE })
-      .whereInIds(itemIds)
-      .execute();
-  }
+    const productId = product_id;
 
-  async createItem(dto: CreateInventoryItemDto, createdBy?: string) {
-    const prod = await this.productRepo.findOne({ where: { id: dto.productId } });
-    if (!prod) throw new BadRequestException('Product not found');
-
-    const item = this.itemRepo.create({ ...dto });
-    return this.itemRepo.save(item);
-  }
-
-  async listItems(q?: { productId?: string; status?: InventoryStatus; page?: number; limit?: number }) {
-    const page = q?.page && q.page > 0 ? q.page : 1;
-    const limit = q?.limit && q.limit > 0 ? q.limit : 20;
-    const where: any = {};
-    if (q?.productId) where.productId = q.productId;
-    if (q?.status) where.status = q.status;
-    const [items, total] = await this.itemRepo.findAndCount({
-      where,
-      skip: (page - 1) * limit,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
-    return { items, total, page, limit };
-  }
-
-  async createMovement(dto: InventoryMovementDto, userId?: string) {
-    const prod = await this.productRepo.findOne({ where: { id: dto.productId } });
-    if (!prod) throw new BadRequestException('Product not found');
-
-    if (dto.movementType === MovementType.OUT) {
-      const current = await this.getAvailableQuantity(dto.productId);
-      if (current < dto.quantity) {
-        throw new ConflictException(`Insufficient stock. Available: ${current}, requested: ${dto.quantity}`);
-      }
+    const totalOutLike = stock_out + missing + damaged;
+    if (totalOutLike > opening_stock) {
+      throw new BadRequestException(
+        'Total OUT/missing/damaged cannot exceed opening stock.',
+      );
     }
 
-    const movement = this.movRepo.create({
-      productId: dto.productId,
-      quantity: dto.quantity,
-      movementType: dto.movementType,
-      referenceId: dto.referenceId,
-      notes: dto.notes,
-      createdBy: userId,
-    });
-    return this.movRepo.save(movement);
-  }
-
-  async assignToOrder(dto: AssignItemsDto, userId?: string) {
     return this.dataSource.transaction(async (manager) => {
-      const prod = await manager.findOne(Product, { where: { id: dto.productId } });
-      if (!prod) throw new BadRequestException('Product not found');
+      const movementRepo = manager.getRepository(InventoryMovement);
+      const itemRepo = manager.getRepository(InventoryItem);
 
-      if (dto.serialNumbers?.length) {
-        const items = await manager.find(InventoryItem, {
-          where: { productId: dto.productId, serialNumber: In(dto.serialNumbers), status: InventoryStatus.IN_STORE },
+      // existing balance
+      const existing = await movementRepo
+        .createQueryBuilder('m')
+        .select('SUM(m.quantity)', 'total')
+        .where('m.productId = :productId', { productId })
+        .getRawOne<{ total: string | null }>();
+
+      const existingBalance = Number(existing?.total || 0);
+
+      let newItemsToCreate = 0;
+
+      // Opening stock (first time only)
+      if (existingBalance === 0 && opening_stock > 0) {
+        const openingMovement = movementRepo.create({
+          productId,
+          quantity: opening_stock,
+          movementType: MovementType.IN,
+          reason: MovementReason.MANUAL,
+          referenceType: MovementReferenceType.SYSTEM,
+          notes: 'Opening stock',
+          createdBy: userId ?? null,
         });
-        if (items.length !== dto.serialNumbers.length) throw new ConflictException('One or more serial numbers not available');
+        await movementRepo.save(openingMovement);
 
-        for (const item of items) {
-          item.status = InventoryStatus.ASSIGNED;
-          item.assignedToOrderId = dto.orderId;
-          await manager.save(item);
-
-          const m = manager.create(InventoryMovement, {
-            productId: dto.productId,
-            quantity: 1,
-            movementType: MovementType.OUT,
-            referenceId: dto.orderId,
-            notes: `Assigned serial ${item.serialNumber}`,
-            createdBy: userId,
-          });
-          await manager.save(m);
-        }
-        return { assigned: items.length, serials: dto.serialNumbers };
+        newItemsToCreate += opening_stock;
       }
 
-      if (!dto.quantity || dto.quantity < 1) throw new BadRequestException('quantity required when serialNumbers not provided');
+      // STOCK IN
+      if (stock_in > 0) {
+        const inMovement = movementRepo.create({
+          productId,
+          quantity: stock_in,
+          movementType: MovementType.IN,
+          reason: MovementReason.PURCHASE,
+          referenceType: MovementReferenceType.ADJUSTMENT,
+          notes: 'Manual stock in',
+          createdBy: userId ?? null,
+        });
+        await movementRepo.save(inMovement);
 
-      const available = await this.getAvailableQuantity(dto.productId);
-      if (available < dto.quantity) throw new ConflictException(`Insufficient stock. Available: ${available}`);
+        newItemsToCreate += stock_in;
+      }
 
-      const movement = manager.create(InventoryMovement, {
-        productId: dto.productId,
-        quantity: dto.quantity,
+      // Create physical InventoryItem rows for any IN quantity
+      if (newItemsToCreate > 0) {
+        const items: InventoryItem[] = [];
+        for (let i = 0; i < newItemsToCreate; i++) {
+          const it = itemRepo.create({
+            productId,
+            status: InventoryStatus.IN_STORE,
+            condition: InventoryCondition.GOOD,
+            // serialNumber, siteAddress, etc can stay null for now
+          });
+          items.push(it);
+        }
+        await itemRepo.save(items);
+      }
+
+      // STOCK OUT (bulk)
+      if (stock_out > 0) {
+        const outMovement = movementRepo.create({
+          productId,
+          quantity: -stock_out,
+          movementType: MovementType.OUT,
+          reason: MovementReason.MANUAL,
+          referenceType: MovementReferenceType.ADJUSTMENT,
+          notes: 'Manual stock out',
+          createdBy: userId ?? null,
+        });
+        await movementRepo.save(outMovement);
+      }
+
+      // MISSING (bulk adjustment)
+      if (missing > 0) {
+        const missingMovement = movementRepo.create({
+          productId,
+          quantity: -missing,
+          movementType: MovementType.ADJUSTMENT,
+          reason: MovementReason.LOSS,
+          referenceType: MovementReferenceType.ADJUSTMENT,
+          notes: 'Missing items',
+          createdBy: userId ?? null,
+        });
+        await movementRepo.save(missingMovement);
+      }
+
+      // DAMAGED (bulk adjustment)
+      if (damaged > 0) {
+        const damagedMovement = movementRepo.create({
+          productId,
+          quantity: -damaged,
+          movementType: MovementType.ADJUSTMENT,
+          reason: MovementReason.DAMAGE,
+          referenceType: MovementReferenceType.ADJUSTMENT,
+          notes: 'Damaged items',
+          createdBy: userId ?? null,
+        });
+        await movementRepo.save(damagedMovement);
+      }
+
+      return this.getProductSummaryInternal(productId);
+    });
+  }
+
+  // Auto-deduct stock when an order is placed
+  async reserveForOrder(
+    productId: string,
+    qty: number,
+    orderId: string,
+    userId?: string,
+  ) {
+    if (qty <= 0) return;
+
+    await this.movementsRepo.save(
+      this.movementsRepo.create({
+        productId,
+        quantity: -qty,
         movementType: MovementType.OUT,
-        referenceId: dto.orderId,
-        notes: 'Assigned to order',
-        createdBy: userId,
-      });
-      await manager.save(movement);
-      return { assigned: dto.quantity };
-    });
+        reason: MovementReason.ORDER_RESERVE,
+        referenceType: MovementReferenceType.ORDER,
+        referenceId: orderId,
+        notes: 'Auto deduct on order placement',
+        createdBy: userId ?? null,
+      }),
+    );
   }
 
-  async returnFromOrder(dto: AssignItemsDto, userId?: string) {
-    return this.dataSource.transaction(async (manager) => {
-      if (dto.serialNumbers?.length) {
-        const items = await manager.find(InventoryItem, {
-          where: { productId: dto.productId, serialNumber: In(dto.serialNumbers), assignedToOrderId: dto.orderId },
-        });
-        if (items.length !== dto.serialNumbers.length) throw new ConflictException('One or more serial numbers not assigned to the order');
+  // Auto-add stock when order is completed / items returned
+  async releaseFromOrder(
+    productId: string,
+    qty: number,
+    orderId: string,
+    userId?: string,
+  ) {
+    if (qty <= 0) return;
 
-        for (const item of items) {
-          item.status = InventoryStatus.IN_STORE;
-          item.assignedToOrderId = null;
-          await manager.save(item);
-
-          const m = manager.create(InventoryMovement, {
-            productId: dto.productId,
-            quantity: 1,
-            movementType: MovementType.IN,
-            referenceId: dto.orderId,
-            notes: `Returned serial ${item.serialNumber}`,
-            createdBy: userId,
-          });
-          await manager.save(m);
-        }
-        return { returned: items.length, serials: dto.serialNumbers };
-      }
-
-      if (!dto.quantity || dto.quantity < 1) throw new BadRequestException('quantity required for return');
-
-      const movement = manager.create(InventoryMovement, {
-        productId: dto.productId,
-        quantity: dto.quantity,
+    await this.movementsRepo.save(
+      this.movementsRepo.create({
+        productId,
+        quantity: qty,
         movementType: MovementType.IN,
-        referenceId: dto.orderId,
-        notes: 'Returned from order',
-        createdBy: userId,
-      });
-      await manager.save(movement);
-      return { returned: dto.quantity };
-    });
+        reason: MovementReason.ORDER_RELEASE,
+        referenceType: MovementReferenceType.ORDER,
+        referenceId: orderId,
+        notes: 'Auto add back on order completion',
+        createdBy: userId ?? null,
+      }),
+    );
   }
 
-  async getAvailableQuantity(productId: string): Promise<number> {
-    const itemCount = await this.itemRepo.count({ where: { productId } });
-    if (itemCount > 0) {
-      return this.itemRepo.count({ where: { productId, status: InventoryStatus.IN_STORE } });
-    }
-    const qb = this.movRepo.createQueryBuilder('m')
-      .select("SUM(CASE WHEN m.movementType = 'IN' THEN m.quantity WHEN m.movementType = 'OUT' THEN -m.quantity ELSE m.quantity END)", 'balance')
-      .where('m.productId = :productId', { productId });
-    const res = await qb.getRawOne();
-    return Number(res?.balance ?? 0);
+  // Assign a single physical item to an order
+  async assignItemToOrder(itemId: string, orderId: string) {
+    const item = await this.itemsRepo.findOne({ where: { id: itemId } });
+    if (!item) throw new BadRequestException('Inventory item not found.');
+
+    item.status = InventoryStatus.ASSIGNED;
+    item.assignedToOrderId = orderId;
+    await this.itemsRepo.save(item);
   }
 
-  async movementsForProduct(productId: string, page = 1, limit = 50) {
-    const [items, total] = await this.movRepo.findAndCount({
-      where: { productId },
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
-    return { items, total, page, limit };
-  }
+  // Return a physical item from an order
+  async returnItemFromOrder(itemId: string) {
+    const item = await this.itemsRepo.findOne({ where: { id: itemId } });
+    if (!item) throw new BadRequestException('Inventory item not found.');
 
-
-  async markDamaged(dto: MarkDamagedDto, performedBy?: string) {
-    const item = await this.itemRepo.findOne({ where: { id: dto.itemId } });
-    if (!item) throw new NotFoundException('Inventory item not found');
-
-    if (item.condition === 'LOST') throw new BadRequestException('Item already marked lost');
-
-    item.condition = 'DAMAGED';
-    item.damagedAt = new Date();
-    item.damageNotes = dto.notes ?? null;
-    item.damageFee = dto.fee ?? null;
-    item.status = InventoryStatus.BROKEN;
-
-    const saved = await this.itemRepo.save(item);
-
-    if (dto.fee && dto.fee > 0) {
-      try {
-        const targetOrderId = item.assignedToOrderId ?? null;
-        await this.billingService.createInvoiceForFee({
-          builderId: (item as any).builderId ?? null,
-          orderId: targetOrderId,
-          description: `Damage fee for item ${item.id} (${item.serialNumber ?? ''})`,
-          amount: dto.fee,
-        });
-      } catch (e) {
-        console.warn('Failed to create damage fee invoice:', (e as any)?.message ?? e);
-      }
-    }
-    return saved;
-  }
-
-
-  async markLost(dto: MarkLostDto, performedBy?: string) {
-    const item = await this.itemRepo.findOne({ where: { id: dto.itemId } });
-    if (!item) throw new NotFoundException('Inventory item not found');
-
-    if (item.condition === 'LOST') throw new BadRequestException('Item already marked lost');
-
-    item.condition = 'LOST';
-    item.lostAt = new Date();
-    item.lostNotes = dto.notes ?? null;
-    item.lostFee = dto.fee ?? null;
-    item.status = InventoryStatus.OUT_FOR_REPAIR;
     item.assignedToOrderId = null;
+    item.status = InventoryStatus.IN_STORE;
+    await this.itemsRepo.save(item);
+  }
 
-    const saved = await this.itemRepo.save(item);
+  // ========== Loss / Damage low-level methods ==========
 
-    if (dto.fee && dto.fee > 0) {
-      try {
-        await this.billingService.createInvoiceForFee({
-          builderId: (item as any).builderId ?? null,
-          orderId: null,
-          description: `Lost item fee for item ${item.id} (${item.serialNumber ?? ''})`,
-          amount: dto.fee,
-        });
-      } catch (e) {
-        console.warn('Failed to create lost fee invoice:', (e as any)?.message ?? e);
-      }
+  async markItemDamaged(
+    itemId: string,
+    notes?: string,
+    fee?: number,
+    userId?: string,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const itemRepo = manager.getRepository(InventoryItem);
+      const movementRepo = manager.getRepository(InventoryMovement);
+
+      const item = await itemRepo.findOne({ where: { id: itemId } });
+      if (!item) throw new BadRequestException('Item not found.');
+
+      item.status = InventoryStatus.DAMAGED;
+      item.condition = InventoryCondition.DAMAGED;
+      item.damagedAt = new Date();
+      item.damageNotes = notes;
+      item.damageFee = fee != null ? String(fee) : undefined;
+      await itemRepo.save(item);
+
+      await movementRepo.save(
+        movementRepo.create({
+          productId: item.productId,
+          inventoryItemId: item.id,
+          quantity: -1,
+          movementType: MovementType.ADJUSTMENT,
+          reason: MovementReason.DAMAGE,
+          referenceType: MovementReferenceType.ADJUSTMENT,
+          notes: notes || 'Item marked damaged',
+          createdBy: userId ?? null,
+        }),
+      );
+    });
+  }
+
+  async markItemLost(
+    itemId: string,
+    notes?: string,
+    fee?: number,
+    userId?: string,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const itemRepo = manager.getRepository(InventoryItem);
+      const movementRepo = manager.getRepository(InventoryMovement);
+
+      const item = await itemRepo.findOne({ where: { id: itemId } });
+      if (!item) throw new BadRequestException('Item not found.');
+
+      item.status = InventoryStatus.LOST;
+      item.condition = InventoryCondition.LOST;
+      item.lostAt = new Date();
+      item.lostNotes = notes;
+      item.lostFee = fee != null ? String(fee) : undefined;
+      await itemRepo.save(item);
+
+      await movementRepo.save(
+        movementRepo.create({
+          productId: item.productId,
+          inventoryItemId: item.id,
+          quantity: -1,
+          movementType: MovementType.ADJUSTMENT,
+          reason: MovementReason.LOSS,
+          referenceType: MovementReferenceType.ADJUSTMENT,
+          notes: notes || 'Item marked lost',
+          createdBy: userId ?? null,
+        }),
+      );
+    });
+  }
+
+  // ========== Methods used by loss.controller.ts ==========
+
+  async markDamaged(dto: MarkDamagedDto, userId?: string) {
+    const { itemId, notes, fee } = dto;
+    return this.markItemDamaged(itemId, notes, fee, userId);
+  }
+
+  async markLost(dto: MarkLostDto, userId?: string) {
+    const { itemId, notes, fee } = dto;
+    return this.markItemLost(itemId, notes, fee, userId);
+  }
+
+  async recoverItem(dto: RecoverItemDto, userId?: string) {
+    const { itemId, notes } = dto;
+
+    return this.dataSource.transaction(async (manager) => {
+      const itemRepo = manager.getRepository(InventoryItem);
+      const movementRepo = manager.getRepository(InventoryMovement);
+
+      const item = await itemRepo.findOne({ where: { id: itemId } });
+      if (!item) throw new BadRequestException('Item not found.');
+
+      item.status = InventoryStatus.IN_STORE;
+      item.assignedToOrderId = null;
+      await itemRepo.save(item);
+
+      await movementRepo.save(
+        movementRepo.create({
+          productId: item.productId,
+          inventoryItemId: item.id,
+          quantity: 1,
+          movementType: MovementType.ADJUSTMENT,
+          reason: MovementReason.MANUAL,
+          referenceType: MovementReferenceType.ADJUSTMENT,
+          notes: notes || 'Item recovered',
+          createdBy: userId ?? null,
+        }),
+      );
+    });
+  }
+
+  async listLostDamaged(params: {
+    productId?: string;
+    from?: string;
+    to?: string;
+  }) {
+    const { productId, from, to } = params;
+
+    const qb = this.itemsRepo
+      .createQueryBuilder('item')
+      .where('item.status IN (:...statuses)', {
+        statuses: [
+          InventoryStatus.DAMAGED,
+          InventoryStatus.LOST,
+          InventoryStatus.BROKEN,
+        ],
+      });
+
+    if (productId) {
+      qb.andWhere('item.productId = :productId', { productId });
     }
 
-    return saved;
-  }
+    if (from) {
+      qb.andWhere('item.createdAt >= :from', { from });
+    }
 
-  async recoverItem(dto: RecoverItemDto, performedBy?: string) {
-    const item = await this.itemRepo.findOne({ where: { id: dto.itemId } });
-    if (!item) throw new NotFoundException('Inventory item not found');
-
-    item.condition = 'REPAIRED';
-    item.damagedAt = null;
-    item.damageNotes = null;
-    item.damageFee = null;
-    item.lostAt = null;
-    item.lostNotes = null;
-    item.lostFee = null;
-    item.status = InventoryStatus.IN_STORE;
-
-    return this.itemRepo.save(item);
-  }
-
-  async listLostDamaged(filters: { productId?: string; builderId?: string; from?: string; to?: string }) {
-    const qb = this.itemRepo.createQueryBuilder('i');
-
-    if (filters.productId) qb.andWhere('i.productId = :productId', { productId: filters.productId });
-    if (filters.from) qb.andWhere('i.createdAt >= :from', { from: filters.from });
-    if (filters.to) qb.andWhere('i.createdAt <= :to', { to: filters.to });
-
-    qb.andWhere('(i.condition = :damaged OR i.condition = :lost)', { damaged: 'DAMAGED', lost: 'LOST' });
-    qb.orderBy('i.createdAt', 'DESC');
+    if (to) {
+      qb.andWhere('item.createdAt <= :to', { to });
+    }
 
     return qb.getMany();
+  }
+
+  // ========== Compatibility methods for orders.service.ts ==========
+
+  async assignToOrder(
+    params: {
+      productId: string;
+      orderId: string;
+      serialNumbers?: string[];
+      quantity: number;
+    },
+    userId?: string,
+  ) {
+    const { productId, orderId, quantity } = params;
+    return this.reserveForOrder(productId, quantity, orderId, userId);
+  }
+
+  async reserveAvailableItems(
+    manager: EntityManager,
+    productId: string,
+    qty: number,
+  ): Promise<InventoryItem[]> {
+    const repo = manager.getRepository(InventoryItem);
+
+    const items = await repo.find({
+      where: {
+        productId,
+        status: InventoryStatus.IN_STORE,
+      },
+      order: { createdAt: 'ASC' },
+      take: qty,
+    });
+
+    if (items.length < qty) {
+      throw new BadRequestException('Not enough available items.');
+    }
+
+    return items;
+  }
+
+  async assignItemsToOrderWithManager(
+    manager: EntityManager,
+    itemIds: string[],
+    orderId: string,
+  ) {
+    const repo = manager.getRepository(InventoryItem);
+    const items = await repo.findByIds(itemIds);
+
+    for (const item of items) {
+      item.status = InventoryStatus.ASSIGNED;
+      item.assignedToOrderId = orderId;
+    }
+
+    await repo.save(items);
   }
 }

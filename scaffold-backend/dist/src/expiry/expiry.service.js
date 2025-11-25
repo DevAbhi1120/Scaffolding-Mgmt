@@ -20,7 +20,7 @@ const notification_service_1 = require("../notifications/notification.service");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const void_entity_1 = require("../voids/void.entity");
-const inventory_item_entity_1 = require("../database/entities/inventory_item.entity");
+const inventory_item_entity_1 = require("../database/entities/inventory-item.entity");
 let ExpiryService = ExpiryService_1 = class ExpiryService {
     constructor(notificationsSvc, voidRepo, invRepo) {
         this.notificationsSvc = notificationsSvc;

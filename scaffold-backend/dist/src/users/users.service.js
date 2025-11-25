@@ -19,6 +19,7 @@ const typeorm_2 = require("@nestjs/typeorm");
 const user_entity_1 = require("../database/entities/user.entity");
 const role_enum_1 = require("../database/entities/role.enum");
 const bcrypt = require("bcrypt");
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,}$/;
 let UsersService = class UsersService {
     constructor(usersRepo) {
         this.usersRepo = usersRepo;
@@ -27,12 +28,25 @@ let UsersService = class UsersService {
         if (!data.password) {
             throw new common_1.BadRequestException('Password is required');
         }
+        if (!PASSWORD_REGEX.test(data.password)) {
+            throw new common_1.BadRequestException('Password must be 8+ chars and include uppercase, lowercase, number and special character');
+        }
+        if (!data.email) {
+            throw new common_1.BadRequestException('Email is required');
+        }
+        const existing = await this.usersRepo.findOne({
+            where: { email: data.email },
+        });
+        if (existing) {
+            throw new common_1.BadRequestException('Email is already in use');
+        }
         const passwordHash = await bcrypt.hash(data.password, 10);
         const user = this.usersRepo.create({
             name: data.name,
             email: data.email,
             passwordHash,
             role: data.role ?? role_enum_1.Role.TEAM_MEMBER,
+            phone: data.phone,
         });
         return await this.usersRepo.save(user);
     }
@@ -41,6 +55,45 @@ let UsersService = class UsersService {
     }
     async findAll() {
         return this.usersRepo.find();
+    }
+    async findOne(id) {
+        const user = await this.usersRepo.findOne({ where: { id } });
+        if (!user) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        return user;
+    }
+    async update(id, data) {
+        const user = await this.findOne(id);
+        if (data.email && data.email !== user.email) {
+            const existing = await this.usersRepo.findOne({
+                where: { email: data.email },
+            });
+            if (existing) {
+                throw new common_1.BadRequestException('Email is already in use');
+            }
+            user.email = data.email;
+        }
+        if (data.password) {
+            if (!PASSWORD_REGEX.test(data.password)) {
+                throw new common_1.BadRequestException('Password must be 8+ chars and include uppercase, lowercase, number and special character');
+            }
+            user.passwordHash = await bcrypt.hash(data.password, 10);
+        }
+        if (typeof data.name === 'string')
+            user.name = data.name;
+        if (typeof data.role !== 'undefined')
+            user.role = data.role;
+        if (typeof data.phone === 'string')
+            user.phone = data.phone;
+        if (typeof data.status === 'number') {
+            user.status = data.status;
+        }
+        return this.usersRepo.save(user);
+    }
+    async remove(id) {
+        const user = await this.findOne(id);
+        await this.usersRepo.remove(user);
     }
 };
 exports.UsersService = UsersService;

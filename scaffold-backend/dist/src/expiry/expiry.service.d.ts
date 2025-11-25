@@ -1,7 +1,7 @@
 import { NotificationsService } from '../notifications/notification.service';
 import { Repository } from 'typeorm';
 import { VoidProtection } from '../voids/void.entity';
-import { InventoryItem } from '../database/entities/inventory_item.entity';
+import { InventoryItem } from '../database/entities/inventory-item.entity';
 export declare class ExpiryService {
     private notificationsSvc;
     private voidRepo;

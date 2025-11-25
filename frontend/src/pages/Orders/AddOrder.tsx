@@ -10,6 +10,7 @@ import PageMeta from "../../components/common/PageMeta";
 import Label from "../../components/form/Label";
 import Select from "react-select";
 import Flatpickr from "react-flatpickr";
+import { BASE_URL } from "../../components/BaseUrl/config";
 
 export default function AddOrder() {
   const navigate = useNavigate();
@@ -29,47 +30,61 @@ export default function AddOrder() {
   });
 
   const [orderItems, setOrderItems] = useState<
-    { product_id: number; product_name: string; stock_quantity: number; price: string; order_qty: number }[]
-  >([{ product_id: 0, product_name: "", stock_quantity: 0, price: 0, order_qty: 0 }]);
+    {
+      product_id: number;
+      product_name: string;
+      stock_quantity: number;
+      price: string;
+      order_qty: number;
+    }[]
+  >([
+    {
+      product_id: 0,
+      product_name: "",
+      stock_quantity: 0,
+      price: 0,
+      order_qty: 0,
+    },
+  ]);
 
   useEffect(() => {
-  const fetchData = async () => {
-    try {
-      const token = localStorage.getItem("token");
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem("token");
 
-      const [productsRes, inventoriesRes] = await Promise.all([
-        axios.get("http://localhost:5000/api/products", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get("http://localhost:5000/api/inventories", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
+        const [productsRes, inventoriesRes] = await Promise.all([
+          axios.get(`${BASE_URL}products`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get(`${BASE_URL}inventories`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
 
-      if (productsRes.data.success && inventoriesRes.data.success) {
-        const inventoriesMap: Record<string, number> = {};
-        inventoriesRes.data.data.forEach((inv: any) => {
-          inventoriesMap[inv.product_id] = inv.stock_in; 
-          console.log(inv.stock_in, "inventoriesRes");
-        });
+        if (productsRes.data.success && inventoriesRes.data.success) {
+          const inventoriesMap: Record<string, number> = {};
+          inventoriesRes.data.data.forEach((inv: any) => {
+            inventoriesMap[inv.product_id] = inv.stock_in;
+            console.log(inv.stock_in, "inventoriesRes");
+          });
 
-        const options = productsRes.data.products.map((p: any) => ({
-          value: p.id,
-          label: p.name,
-          price: p.price,
-          // stock_quantity => inventory ka stock_in
-          stock_quantity: inventoriesMap[p.id] || 0,
-        }));
+          const options = productsRes.data.products.map((p: any) => ({
+            value: p.id,
+            label: p.name,
+            price: p.price,
+            // stock_quantity => inventory ka stock_in
+            stock_quantity: inventoriesMap[p.id] || 0,
+          }));
 
-        setProducts(options);
+          setProducts(options);
+        }
+      } catch (err) {
+        console.error("Error fetching data", err);
       }
-    } catch (err) {
-      console.error("Error fetching data", err);
-    }
-  };
+    };
 
-  fetchData();
-}, [token]);
+    fetchData();
+  }, [token]);
 
   const handleProductChange = (selected, index) => {
     const updatedItems = [...orderItems];
@@ -77,15 +92,17 @@ export default function AddOrder() {
     updatedItems[index] = {
       ...updatedItems[index],
       product_id: selected?.value || null,
-      stock_quantity: selected?.stock_quantity || 0, // naya product ka stock
+      stock_quantity: selected?.stock_quantity || 0,
       price: selected?.price || 0,
-      order_qty: 0, 
+      order_qty: 0,
     };
     setOrderItems(updatedItems);
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >
   ) => {
     const { name, value } = e.target;
     clearError(name);
@@ -103,7 +120,9 @@ export default function AddOrder() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.order_date) newErrors.order_date = "Order date is required.";
-    if (orderItems.filter((i) => i.product_id && i.order_qty > 0).length === 0) {
+    if (
+      orderItems.filter((i) => i.product_id && i.order_qty > 0).length === 0
+    ) {
       newErrors.products = "At least one product is required.";
     }
 
@@ -112,7 +131,10 @@ export default function AddOrder() {
   };
 
   // Handle order qty
-  const handleOrderQtyChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+  const handleOrderQtyChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    index: number
+  ) => {
     const updatedItems = [...orderItems];
     updatedItems[index].order_qty = parseInt(e.target.value, 10) || 0;
     setOrderItems(updatedItems);
@@ -122,7 +144,13 @@ export default function AddOrder() {
   const addMoreItem = () => {
     setOrderItems([
       ...orderItems,
-      { product_id: 0, product_name: "", stock_quantity: 0, price: 0, order_qty: 0 },
+      {
+        product_id: 0,
+        product_name: "",
+        stock_quantity: 0,
+        price: 0,
+        order_qty: 0,
+      },
     ]);
   };
 
@@ -156,7 +184,11 @@ export default function AddOrder() {
       Swal.fire("Success", "Order created successfully!", "success");
       navigate("/order-list");
     } catch (err: any) {
-      Swal.fire("Error", err.response?.data?.message || "Failed to create order", "error");
+      Swal.fire(
+        "Error",
+        err.response?.data?.message || "Failed to create order",
+        "error"
+      );
     } finally {
       setLoading(false);
     }
@@ -169,7 +201,7 @@ export default function AddOrder() {
 
       <ComponentCard>
         <form onSubmit={handleSubmit} className="space-y-6">
-         <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>User Name *</Label>
               <input
@@ -223,16 +255,18 @@ export default function AddOrder() {
             <Label>Order Date *</Label>
             <Flatpickr
               value={formData.order_date}
-              options={{ dateFormat: "d-m-Y" }} 
+              options={{ dateFormat: "d-m-Y" }}
               onChange={(selectedDates) => {
-                const date = selectedDates[0] 
-                  ? selectedDates[0].toISOString().slice(0, 10) 
+                const date = selectedDates[0]
+                  ? selectedDates[0].toISOString().slice(0, 10)
                   : "";
                 handleChange({ target: { name: "order_date", value: date } });
               }}
               className="border rounded p-2 w-full text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800"
             />
-            {errors.order_date && <p className="text-red-600 text-sm">{errors.order_date}</p>}
+            {errors.order_date && (
+              <p className="text-red-600 text-sm">{errors.order_date}</p>
+            )}
           </div>
 
           {/* Notes */}
@@ -266,12 +300,10 @@ export default function AddOrder() {
           <div>
             <Label>Add Products *</Label>
             {orderItems.map((item, index) => (
-              <div key={index}
-                className="border rounded-lg p-4 mb-3 shadow-sm"
-              >
+              <div key={index} className="border rounded-lg p-4 mb-3 shadow-sm">
                 <div className="grid grid-cols-12 gap-4">
                   {/* Product Select */}
-                 
+
                   {/* <div className="col-span-6">
                     <Label>Products</Label>
                     {(() => {
@@ -323,7 +355,9 @@ export default function AddOrder() {
                           <Select
                             options={availableProducts}
                             value={selectedProduct || null}
-                            onChange={(selected) => handleProductChange(selected, index)}
+                            onChange={(selected) =>
+                              handleProductChange(selected, index)
+                            }
                             placeholder="Select a product..."
                           />
                           {selectedProduct?.stock_quantity > 0 && (
@@ -351,7 +385,11 @@ export default function AddOrder() {
                         const qty = Number(e.target.value);
 
                         if (qty > item.stock_quantity + (item.order_qty || 0)) {
-                          Swal.fire("Error", "Order quantity cannot exceed stock", "error");
+                          Swal.fire(
+                            "Error",
+                            "Order quantity cannot exceed stock",
+                            "error"
+                          );
                         } else {
                           const updatedItems = [...orderItems];
 
@@ -362,7 +400,8 @@ export default function AddOrder() {
 
                           // fir naya qty minus karo
                           updatedItems[index].order_qty = qty;
-                          updatedItems[index].stock_quantity = restoredStock - qty;
+                          updatedItems[index].stock_quantity =
+                            restoredStock - qty;
 
                           setOrderItems(updatedItems);
                         }
@@ -382,7 +421,6 @@ export default function AddOrder() {
                   </button>
                 )}
               </div>
-
             ))}
 
             <button
@@ -392,7 +430,9 @@ export default function AddOrder() {
             >
               + Add More
             </button>
-            {errors.products && <p className="text-red-600 text-sm">{errors.products}</p>}
+            {errors.products && (
+              <p className="text-red-600 text-sm">{errors.products}</p>
+            )}
           </div>
 
           {/* Submit */}

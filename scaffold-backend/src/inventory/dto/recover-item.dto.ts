@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class RecoverItemDto {
   @IsUUID()
@@ -6,5 +6,9 @@ export class RecoverItemDto {
 
   @IsOptional()
   @IsString()
-  notes?: string; // note about recovery/repair
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  orderId?: string;
 }
