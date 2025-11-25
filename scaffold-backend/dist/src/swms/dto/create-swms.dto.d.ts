@@ -1,7 +1,12 @@
+declare class TaskDto {
+    name: string;
+    highRisk?: boolean;
+}
 export declare class CreateSwmsDto {
     orderId?: string;
     submittedBy?: string;
-    swmsData: any;
-    highRiskTasks: any[];
+    formData: any;
+    tasks: TaskDto[];
     attachments?: string[];
 }
+export {};

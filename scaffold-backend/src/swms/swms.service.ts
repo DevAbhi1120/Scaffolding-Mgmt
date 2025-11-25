@@ -11,29 +11,33 @@ export class SwmsService {
   constructor(
     @InjectRepository(Swms) private repo: Repository<Swms>,
     private notificationsSvc: NotificationsService
-  ) {}
+  ) { }
 
+  // REPLACE create() METHOD WITH THIS
   async create(dto: CreateSwmsDto) {
-    if (!dto.swmsData || !dto.highRiskTasks) throw new BadRequestException('swmsData and highRiskTasks are required');
+    if (!dto.formData) throw new BadRequestException('formData is required');
+    if (!dto.tasks || !Array.isArray(dto.tasks)) throw new BadRequestException('tasks must be an array');
+
     const ent = this.repo.create({
       orderId: dto.orderId ?? null,
       submittedBy: dto.submittedBy ?? null,
-      swmsData: dto.swmsData,
-      highRiskTasks: dto.highRiskTasks,
+      swmsData: dto.formData,        // ← save as swmsData
+      highRiskTasks: dto.tasks,      // ← save as highRiskTasks
       attachments: dto.attachments ?? [],
-      editableByAdmin: true
+      editableByAdmin: true,
     });
+
     const saved = await this.repo.save(ent);
 
     // Notify admin
     const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.SMTP_USER;
     if (adminEmail) {
       const subject = `SWMS submitted (Order: ${dto.orderId ?? 'N/A'})`;
-      const text = `A SWMS was submitted${dto.orderId ? ` for order ${dto.orderId}` : ''}. SWMS id: ${saved.id}.`;
+      const text = `A SWMS was submitted. SWMS id: ${saved.id}.`;
       try {
         await this.notificationsSvc.enqueueEmailNotification(adminEmail, subject, text, 'swms', saved.id);
       } catch (e) {
-        console.warn('Failed to enqueue admin notification for SWMS:', (e as any)?.message ?? e);
+        console.warn('Failed to notify admin:', e);
       }
     }
 
@@ -61,5 +65,9 @@ export class SwmsService {
     // Ensure admin edits remain allowed
     existing.editableByAdmin = true;
     return this.repo.save(existing);
+  }
+
+  async listAll() {
+    return this.repo.find({ order: { createdAt: 'DESC' } });
   }
 }

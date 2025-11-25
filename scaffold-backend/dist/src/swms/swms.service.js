@@ -24,26 +24,28 @@ let SwmsService = class SwmsService {
         this.notificationsSvc = notificationsSvc;
     }
     async create(dto) {
-        if (!dto.swmsData || !dto.highRiskTasks)
-            throw new common_1.BadRequestException('swmsData and highRiskTasks are required');
+        if (!dto.formData)
+            throw new common_1.BadRequestException('formData is required');
+        if (!dto.tasks || !Array.isArray(dto.tasks))
+            throw new common_1.BadRequestException('tasks must be an array');
         const ent = this.repo.create({
             orderId: dto.orderId ?? null,
             submittedBy: dto.submittedBy ?? null,
-            swmsData: dto.swmsData,
-            highRiskTasks: dto.highRiskTasks,
+            swmsData: dto.formData,
+            highRiskTasks: dto.tasks,
             attachments: dto.attachments ?? [],
-            editableByAdmin: true
+            editableByAdmin: true,
         });
         const saved = await this.repo.save(ent);
         const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.SMTP_USER;
         if (adminEmail) {
             const subject = `SWMS submitted (Order: ${dto.orderId ?? 'N/A'})`;
-            const text = `A SWMS was submitted${dto.orderId ? ` for order ${dto.orderId}` : ''}. SWMS id: ${saved.id}.`;
+            const text = `A SWMS was submitted. SWMS id: ${saved.id}.`;
             try {
                 await this.notificationsSvc.enqueueEmailNotification(adminEmail, subject, text, 'swms', saved.id);
             }
             catch (e) {
-                console.warn('Failed to enqueue admin notification for SWMS:', e?.message ?? e);
+                console.warn('Failed to notify admin:', e);
             }
         }
         return saved;
@@ -67,6 +69,9 @@ let SwmsService = class SwmsService {
         Object.assign(existing, dto);
         existing.editableByAdmin = true;
         return this.repo.save(existing);
+    }
+    async listAll() {
+        return this.repo.find({ order: { createdAt: 'DESC' } });
     }
 };
 exports.SwmsService = SwmsService;

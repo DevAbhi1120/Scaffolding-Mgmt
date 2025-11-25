@@ -11,4 +11,5 @@ export declare class SwmsService {
     findByOrder(orderId: string): Promise<Swms[]>;
     get(id: string): Promise<Swms>;
     update(id: string, dto: UpdateSwmsDto, isAdmin?: boolean): Promise<Swms>;
+    listAll(): Promise<Swms[]>;
 }

@@ -1,26 +1,29 @@
+// src/auth/auth.module.ts
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
-import { AuthService } from './auth.service';
-import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { JwtStrategy } from './jwt.strategy';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BlacklistService } from './blacklist.service';
 
 @Module({
   imports: [
-    ConfigModule,
+    UsersModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (cfg: ConfigService) => ({
-        secret: cfg.get('jwt.secret'),
-        signOptions: { expiresIn: cfg.get('jwt.expiresIn') }
+      useFactory: (config: ConfigService) => ({
+        secret: config.get<string>('JWT_SECRET') || 'your-super-secret-jwt-key-here',
+        signOptions: { expiresIn: '24h' },
       }),
-      inject: [ConfigService]
+      inject: [ConfigService],
     }),
-    UsersModule
   ],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService]
+  providers: [AuthService, JwtStrategy, BlacklistService],
+  controllers: [AuthController],
+  exports: [AuthService, BlacklistService],
 })
 export class AuthModule {}

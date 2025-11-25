@@ -3,15 +3,13 @@ import { Order } from './order.entity';
 export declare enum InventoryStatus {
     IN_STORE = "IN_STORE",
     ASSIGNED = "ASSIGNED",
-    DAMAGED = "DAMAGED",
-    LOST = "LOST",
     BROKEN = "BROKEN",
     OUT_FOR_REPAIR = "OUT_FOR_REPAIR"
 }
 export declare class InventoryItem {
     id: string;
     productId: string;
-    product?: Product | null;
+    product: Product;
     serialNumber?: string | null;
     siteAddress?: string | null;
     codeNo?: string | null;
@@ -26,7 +24,6 @@ export declare class InventoryItem {
     lostAt?: Date | null;
     lostNotes?: string | null;
     lostFee?: number | null;
-    extra?: any;
     createdAt: Date;
-    updatedAt: Date;
+    deletedAt?: Date | null;
 }

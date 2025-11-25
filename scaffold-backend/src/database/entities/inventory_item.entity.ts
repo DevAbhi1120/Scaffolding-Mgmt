@@ -1,12 +1,12 @@
+// src/database/entities/inventory_item.entity.ts
 import {
   Entity,
-  PrimaryGeneratedColumn,
   Column,
+  PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
-  UpdateDateColumn,
-  Index
+  DeleteDateColumn,
 } from 'typeorm';
 import { Product } from './product.entity';
 import { Order } from './order.entity';
@@ -14,29 +14,26 @@ import { Order } from './order.entity';
 export enum InventoryStatus {
   IN_STORE = 'IN_STORE',
   ASSIGNED = 'ASSIGNED',
-  DAMAGED = 'DAMAGED',
-  LOST = 'LOST',
   BROKEN = 'BROKEN',
-  OUT_FOR_REPAIR = 'OUT_FOR_REPAIR'
+  OUT_FOR_REPAIR = 'OUT_FOR_REPAIR',
 }
 
-@Entity({ name: 'inventory_items' })
+@Entity('inventory_items')
 export class InventoryItem {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'uuid' })
-  @Index()
   productId: string;
 
-  @ManyToOne(() => Product, { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => Product)
   @JoinColumn({ name: 'productId' })
-  product?: Product | null;
+  product: Product;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   serialNumber?: string | null;
 
-  @Column({ type: 'varchar', length: 300, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   siteAddress?: string | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
@@ -45,21 +42,24 @@ export class InventoryItem {
   @Column({ type: 'date', nullable: true })
   expiryDate?: Date | null;
 
-  @Column({ type: 'enum', enum: InventoryStatus, default: InventoryStatus.IN_STORE })
+  @Column({
+    type: 'enum',
+    enum: InventoryStatus,
+    default: InventoryStatus.IN_STORE,
+  })
   status: InventoryStatus;
 
   @Column({ type: 'uuid', nullable: true })
   assignedToOrderId?: string | null;
 
-  @ManyToOne(() => Order, { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => Order, { nullable: true })
   @JoinColumn({ name: 'assignedToOrderId' })
   assignedToOrder?: Order | null;
 
-  // Lost/damaged tracking
   @Column({ type: 'varchar', length: 50, nullable: true })
-  condition?: string | null; // e.g., 'OK' | 'DAMAGED' | 'LOST' | 'REPAIRED'
+  condition?: string | null; // e.g. 'OK','DAMAGED','LOST'
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   damagedAt?: Date | null;
 
   @Column({ type: 'text', nullable: true })
@@ -68,7 +68,7 @@ export class InventoryItem {
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   damageFee?: number | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   lostAt?: Date | null;
 
   @Column({ type: 'text', nullable: true })
@@ -77,12 +77,9 @@ export class InventoryItem {
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   lostFee?: number | null;
 
-  @Column({ type: 'json', nullable: true })
-  extra?: any;
-
   @CreateDateColumn()
   createdAt: Date;
 
-  @UpdateDateColumn()
-  updatedAt: Date;
+  @DeleteDateColumn({ nullable: true })
+  deletedAt?: Date | null;
 }

@@ -22,6 +22,9 @@ let UsersController = class UsersController {
     async create(body) {
         return this.svc.create(body);
     }
+    async list() {
+        return this.svc.findAll();
+    }
 };
 exports.UsersController = UsersController;
 __decorate([
@@ -31,6 +34,12 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)(),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "list", null);
 exports.UsersController = UsersController = __decorate([
     (0, common_1.Controller)('users'),
     __metadata("design:paramtypes", [users_service_1.UsersService])

@@ -19,25 +19,9 @@ __decorate([
     __metadata("design:type", String)
 ], FileEntity.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 512, unique: true }),
-    __metadata("design:type", String)
-], FileEntity.prototype, "key", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 255 }),
-    __metadata("design:type", String)
-], FileEntity.prototype, "filename", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
-    __metadata("design:type", Object)
-], FileEntity.prototype, "originalName", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 150, nullable: true }),
-    __metadata("design:type", Object)
-], FileEntity.prototype, "mimeType", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'bigint', nullable: true }),
-    __metadata("design:type", Object)
-], FileEntity.prototype, "size", void 0);
+    (0, typeorm_1.Column)({ type: 'json', nullable: false, default: '[]' }),
+    __metadata("design:type", Array)
+], FileEntity.prototype, "keys", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 100, nullable: true }),
     __metadata("design:type", Object)
@@ -54,6 +38,10 @@ __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], FileEntity.prototype, "createdAt", void 0);
+__decorate([
+    (0, typeorm_1.UpdateDateColumn)(),
+    __metadata("design:type", Date)
+], FileEntity.prototype, "updatedAt", void 0);
 exports.FileEntity = FileEntity = __decorate([
     (0, typeorm_1.Entity)({ name: 'files' })
 ], FileEntity);

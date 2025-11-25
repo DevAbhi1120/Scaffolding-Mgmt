@@ -11,6 +11,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateSwmsDto = void 0;
 const class_validator_1 = require("class-validator");
+class TaskDto {
+}
 class CreateSwmsDto {
 }
 exports.CreateSwmsDto = CreateSwmsDto;
@@ -27,11 +29,11 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
-], CreateSwmsDto.prototype, "swmsData", void 0);
+], CreateSwmsDto.prototype, "formData", void 0);
 __decorate([
     (0, class_validator_1.IsArray)(),
     __metadata("design:type", Array)
-], CreateSwmsDto.prototype, "highRiskTasks", void 0);
+], CreateSwmsDto.prototype, "tasks", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),

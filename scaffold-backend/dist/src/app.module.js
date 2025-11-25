@@ -25,6 +25,7 @@ const swms_module_1 = require("./swms/swms.module");
 const reports_module_1 = require("./reports/reports.module");
 const schedule_1 = require("@nestjs/schedule");
 const expiry_module_1 = require("./expiry/expiry.module");
+const builders_module_1 = require("./builders/builders.module");
 const audit_service_1 = require("./common/audit.service");
 const audit_interceptor_1 = require("./common/interceptors/audit.interceptor");
 const core_1 = require("@nestjs/core");
@@ -42,6 +43,7 @@ exports.AppModule = AppModule = __decorate([
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             jobs_module_1.JobsModule,
+            builders_module_1.BuildersModule,
             categories_module_1.CategoriesModule,
             products_module_1.ProductsModule,
             orders_module_1.OrdersModule,

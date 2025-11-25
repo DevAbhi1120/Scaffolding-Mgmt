@@ -29,7 +29,9 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                     password: cfg.get('db.password'),
                     database: cfg.get('db.database'),
                     entities: [user_entity_1.User, product_entity_1.Product, category_entity_1.Category, __dirname + '/entities/*.ts'],
-                    synchronize: false
+                    autoLoadEntities: true,
+                    synchronize: false,
+                    logging: false,
                 }),
                 inject: [config_1.ConfigService]
             }),

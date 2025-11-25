@@ -30,6 +30,7 @@ export class ReportsService {
   }
 
   // ORDERS report with filters
+  // src/reports/reports.service.ts — REPLACE ordersReport() WITH THIS
   async ordersReport(q: {
     page?: number;
     limit?: number;
@@ -44,49 +45,51 @@ export class ReportsService {
     const limit = q.limit && q.limit > 0 ? q.limit : 50;
     const offset = (page - 1) * limit;
 
-    const params: any[] = [];
-    let where = '1=1';
+    const qb = this.dataSource.createQueryBuilder()
+      .select('o.id', 'orderId')
+      .addSelect('o.status', 'status')
+      .addSelect('o.startDate', 'startDate')
+      .addSelect('o.closeDate', 'closeDate')
+      .addSelect('o.createdAt', 'createdAt')
+      .addSelect('b.id', 'builderId')
+      .addSelect('b.businessName', 'businessName')
+      .addSelect('b.businessAddress', 'businessAddress')
+      .addSelect('COALESCE(item_counts.cnt, 0)', 'itemCount')
+      .from('orders', 'o')
+      .leftJoin('builders', 'b', 'b.id = o.builderId')
+      .leftJoin(
+        '(SELECT orderId, COUNT(*) as cnt FROM order_items GROUP BY orderId)',
+        'item_counts',
+        'item_counts.orderId = o.id'
+      )
+      .where('1 = 1');
 
-    if (q.from) {
-      where += ' AND o.createdAt >= ?';
-      params.push(q.from);
-    }
-    if (q.to) {
-      where += ' AND o.createdAt <= ?';
-      params.push(q.to);
-    }
-    if (q.status) {
-      where += ' AND o.status = ?';
-      params.push(q.status);
-    }
-    if (q.businessName) {
-      where += ' AND b.businessName LIKE ?';
-      params.push(`%${q.businessName}%`);
-    }
-    if (q.businessAddress) {
-      where += ' AND b.businessAddress LIKE ?';
-      params.push(`%${q.businessAddress}%`);
-    }
+    if (q.from) qb.andWhere('o.createdAt >= :from', { from: q.from });
+    if (q.to) qb.andWhere('o.createdAt <= :to', { to: q.to });
+    if (q.status) qb.andWhere('o.status = :status', { status: q.status });
+    if (q.businessName) qb.andWhere('b.businessName LIKE :name', { name: `%${q.businessName}%` });
+    if (q.businessAddress) qb.andWhere('b.businessAddress LIKE :addr', { addr: `%${q.businessAddress}%` });
 
-    const sql = `
-      SELECT o.id as orderId, o.status, o.startDate, o.closeDate, o.createdAt,
-             b.id as builderId, b.businessName, b.businessAddress,
-             (SELECT COUNT(*) FROM order_items oi WHERE oi.orderId = o.id) as itemCount
-      FROM orders o
-      LEFT JOIN builders b ON b.id = o.builderId
-      WHERE ${where}
-      ORDER BY o.createdAt DESC
-      LIMIT ? OFFSET ?
-    `;
+    qb.orderBy('o.createdAt', 'DESC')
+      .limit(limit)
+      .offset(offset);
 
-    params.push(limit, offset);
+    const items = await qb.getRawMany();
 
-    const items = await this.dataSource.query(sql, params);
+    const countQb = this.dataSource.createQueryBuilder()
+      .select('COUNT(*)', 'cnt')
+      .from('orders', 'o')
+      .leftJoin('builders', 'b', 'b.id = o.builderId')
+      .where('1 = 1');
 
-    // total count
-    const countSql = `SELECT COUNT(*) as cnt FROM orders o LEFT JOIN builders b ON b.id = o.builderId WHERE ${where}`;
-    const totalRes = await this.dataSource.query(countSql, params.slice(0, params.length - 2));
-    const total = Number(totalRes?.[0]?.cnt ?? 0);
+    if (q.from) countQb.andWhere('o.createdAt >= :from', { from: q.from });
+    if (q.to) countQb.andWhere('o.createdAt <= :to', { to: q.to });
+    if (q.status) countQb.andWhere('o.status = :status', { status: q.status });
+    if (q.businessName) countQb.andWhere('b.businessName LIKE :name', { name: `%${q.businessName}%` });
+    if (q.businessAddress) countQb.andWhere('b.businessAddress LIKE :addr', { addr: `%${q.businessAddress}%` });
+
+    const totalRes = await countQb.getRawOne();
+    const total = Number(totalRes?.cnt ?? 0);
 
     return { items, total, page, limit };
   }
@@ -181,29 +184,55 @@ export class ReportsService {
   }
 
   // LEDGER for builder: payments/invoices/credits - expects a payments table or payments records
+  // src/reports/reports.service.ts — FINAL WORKING VERSION
   async ledgerReport(builderId: string, q: { page?: number; limit?: number; format?: 'json' | 'csv' }) {
     const page = q.page && q.page > 0 ? q.page : 1;
     const limit = q.limit && q.limit > 0 ? q.limit : 100;
     const offset = (page - 1) * limit;
 
-    // This assumes you have a payments table with (id, builderId, type, amount, date, notes)
     const sql = `
-      SELECT id, type, amount, date, notes
-      FROM payments
-      WHERE builderId = ?
-      ORDER BY date DESC
-      LIMIT ? OFFSET ?
-    `;
+    SELECT 
+      id,
+      method AS type,
+      amount,
+      createdAt AS date,
+      notes,
+      reference,
+      status
+    FROM payments
+    WHERE builderId = ?
+    ORDER BY createdAt DESC
+    LIMIT ? OFFSET ?
+  `;
+
     const items = await this.dataSource.query(sql, [builderId, limit, offset]);
 
-    const countRes = await this.dataSource.query(`SELECT COUNT(*) as cnt FROM payments WHERE builderId = ?`, [builderId]);
+    const countRes = await this.dataSource.query(
+      `SELECT COUNT(*) as cnt FROM payments WHERE builderId = ?`,
+      [builderId]
+    );
     const total = Number(countRes?.[0]?.cnt ?? 0);
 
-    // Compute balance summary if payments/invoices available (simplified)
-    const balRes = await this.dataSource.query(`SELECT SUM(amount) as balance FROM payments WHERE builderId = ?`, [builderId]);
-    const balance = Number(balRes?.[0]?.balance ?? 0);
+    const balanceRes = await this.dataSource.query(
+      `SELECT 
+       COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN amount ELSE 0 END), 0) as received,
+       COALESCE(SUM(CASE WHEN status = 'REVERSED' THEN amount ELSE 0 END), 0) as reversed
+     FROM payments WHERE builderId = ?`,
+      [builderId]
+    );
+    const balance = Number(balanceRes?.[0]?.received ?? 0) - Number(balanceRes?.[0]?.reversed ?? 0);
 
-    return { items, total, page, limit, balance };
+    return {
+      items,
+      total,
+      page,
+      limit,
+      balance,
+      summary: {
+        totalReceived: Number(balanceRes?.[0]?.received ?? 0),
+        totalReversed: Number(balanceRes?.[0]?.reversed ?? 0),
+      }
+    };
   }
 
   /**

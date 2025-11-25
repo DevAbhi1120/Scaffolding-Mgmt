@@ -9,19 +9,33 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateCategoryDto = void 0;
+exports.CreateBuilderDto = void 0;
 const class_validator_1 = require("class-validator");
-class CreateCategoryDto {
+class CreateBuilderDto {
 }
-exports.CreateCategoryDto = CreateCategoryDto;
+exports.CreateBuilderDto = CreateBuilderDto;
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Length)(1, 150),
     __metadata("design:type", String)
-], CreateCategoryDto.prototype, "name", void 0);
+], CreateBuilderDto.prototype, "businessName", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], CreateCategoryDto.prototype, "description", void 0);
-//# sourceMappingURL=create-category.dto.js.map
+], CreateBuilderDto.prototype, "businessAddress", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEmail)(),
+    __metadata("design:type", String)
+], CreateBuilderDto.prototype, "contactEmail", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsPhoneNumber)(),
+    __metadata("design:type", String)
+], CreateBuilderDto.prototype, "contactPhone", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    __metadata("design:type", Object)
+], CreateBuilderDto.prototype, "config", void 0);
+//# sourceMappingURL=create-builder.dto.js.map

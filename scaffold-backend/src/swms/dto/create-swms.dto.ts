@@ -1,4 +1,11 @@
-import { IsUUID, IsOptional, IsArray, IsObject, ArrayMinSize } from 'class-validator';
+// src/swms/dto/create-swms.dto.ts
+import { IsUUID, IsOptional, IsArray, IsObject, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class TaskDto {
+  name: string;
+  highRisk?: boolean;
+}
 
 export class CreateSwmsDto {
   @IsOptional()
@@ -9,11 +16,13 @@ export class CreateSwmsDto {
   @IsUUID()
   submittedBy?: string;
 
+  // ← YOU SENT "formData" → CHANGE TO "formData"
   @IsObject()
-  swmsData: any;
+  formData!: any;  // ← THIS IS WHAT YOU SEND
 
+  // ← YOU SENT "tasks" → CHANGE TO "tasks"
   @IsArray()
-  highRiskTasks: any[]; // each task is an object with columns per the sheet
+  tasks!: TaskDto[];
 
   @IsOptional()
   @IsArray()

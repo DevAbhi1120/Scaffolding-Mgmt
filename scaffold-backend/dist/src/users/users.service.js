@@ -17,19 +17,30 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("typeorm");
 const typeorm_2 = require("@nestjs/typeorm");
 const user_entity_1 = require("../database/entities/user.entity");
+const role_enum_1 = require("../database/entities/role.enum");
 const bcrypt = require("bcrypt");
 let UsersService = class UsersService {
     constructor(usersRepo) {
         this.usersRepo = usersRepo;
     }
     async create(data) {
-        const salt = await bcrypt.genSalt();
-        const pw = await bcrypt.hash(data.passwordHash, salt);
-        const user = this.usersRepo.create({ ...data, passwordHash: pw });
-        return this.usersRepo.save(user);
+        if (!data.password) {
+            throw new common_1.BadRequestException('Password is required');
+        }
+        const passwordHash = await bcrypt.hash(data.password, 10);
+        const user = this.usersRepo.create({
+            name: data.name,
+            email: data.email,
+            passwordHash,
+            role: data.role ?? role_enum_1.Role.TEAM_MEMBER,
+        });
+        return await this.usersRepo.save(user);
     }
     async findByEmail(email) {
         return this.usersRepo.findOne({ where: { email } });
+    }
+    async findAll() {
+        return this.usersRepo.find();
     }
 };
 exports.UsersService = UsersService;

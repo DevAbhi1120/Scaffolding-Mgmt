@@ -16,6 +16,7 @@ import { SwmsModule } from './swms/swms.module';
 import { ReportsModule } from './reports/reports.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ExpiryModule } from './expiry/expiry.module';
+import { BuildersModule } from './builders/builders.module';
 import { AuditService } from './common/audit.service';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { APP_INTERCEPTOR } from '@nestjs/core';
@@ -30,6 +31,7 @@ import { AuditLog } from './common/entities/audit-log.entity';
     AuthModule,
     UsersModule,
     JobsModule,
+    BuildersModule,
     CategoriesModule,
     ProductsModule,
     OrdersModule,

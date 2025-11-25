@@ -17,7 +17,9 @@ import { Category } from './entities/category.entity';
         password: cfg.get('db.password'),
         database: cfg.get('db.database'),
         entities: [User, Product, Category, __dirname + '/entities/*.ts'],
-        synchronize: false
+        autoLoadEntities: true,
+        synchronize: false,
+        logging: false,
       }),
       inject: [ConfigService]
     }),
@@ -25,4 +27,4 @@ import { Category } from './entities/category.entity';
   ],
   exports: [TypeOrmModule]
 })
-export class DatabaseModule {}
+export class DatabaseModule { }

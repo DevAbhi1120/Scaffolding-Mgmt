@@ -1,37 +1,79 @@
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { FileEntity } from './file.entity';
+interface UploadOptions {
+    relatedEntityType?: string;
+    relatedEntityId?: string;
+    uploadedBy: string;
+    category?: string;
+}
+interface UpdateOptions {
+    relatedEntityType?: string;
+    relatedEntityId?: string;
+    category?: string;
+    uploadedBy: string;
+    keepKeys?: string[];
+    removeKeys?: string[];
+}
 export declare class FilesService {
     private configService;
     private repo;
     private bucket;
     private region;
+    private accessKeyId?;
+    private secretAccessKey?;
     constructor(configService: ConfigService, repo: Repository<FileEntity>);
+    private isS3Enabled;
     private buildS3Client;
-    presign(filename: string, contentType?: string): Promise<{
-        uploadUrl: string;
-        key: string;
-        fileUrl: string;
+    private resolveFolder;
+    private buildKey;
+    private getBaseUrl;
+    uploadFiles(files: Express.Multer.File[], opts: UploadOptions): Promise<{
+        record: FileEntity;
+        keys: string[];
+        urls: string[];
     }>;
-    saveMetadata(data: {
-        key: string;
-        filename: string;
-        originalName?: string;
-        mimeType?: string;
-        size?: number;
-        relatedEntityType?: string;
-        relatedEntityId?: string;
-        uploadedBy?: string;
-    }): Promise<FileEntity[]>;
-    getSignedGetUrl(fileId: string, expiresSeconds?: number): Promise<{
-        url: string;
-        file: FileEntity;
-    }>;
-    listFilesForEntity(entityType: string, entityId: string): Promise<FileEntity[]>;
-    deleteFile(fileId: string, requestingUser: {
-        id: string;
-        role?: string;
+    listFiles(opts: {
+        page?: number;
+        limit?: number;
+        entityType?: string;
+        entityId?: string;
     }): Promise<{
-        ok: boolean;
+        items: {
+            urls: string[];
+            id: string;
+            keys: string[];
+            relatedEntityType?: string | null;
+            relatedEntityId?: string | null;
+            uploadedBy?: string | null;
+            createdAt: Date;
+            updatedAt: Date;
+        }[];
+        total: number;
+        page: number;
+        limit: number;
+    }>;
+    getFileLocation(id: string, index?: number): Promise<{
+        type: 'local';
+        key: string;
+        file: FileEntity;
+        filePath: string;
+    } | {
+        type: 's3';
+        key: string;
+        file: FileEntity;
+        url: string;
+    }>;
+    updateFile(id: string, files: Express.Multer.File[] | undefined, opts: UpdateOptions): Promise<{
+        record: FileEntity;
+        keys: string[];
+        urls: string[];
+    }>;
+    deleteFile(id: string): Promise<{
+        success: true;
+    }>;
+    deleteFilesForEntity(entityType: string, entityId: string): Promise<{
+        deletedCount: number;
     }>;
 }
+export {};

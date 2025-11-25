@@ -17,7 +17,7 @@ export declare class ReportsService {
         status?: 'OPEN' | 'CLOSED';
         format?: 'json' | 'csv';
     }): Promise<{
-        items: any;
+        items: any[];
         total: number;
         page: number;
         limit: number;
@@ -56,6 +56,10 @@ export declare class ReportsService {
         page: number;
         limit: number;
         balance: number;
+        summary: {
+            totalReceived: number;
+            totalReversed: number;
+        };
     }>;
     productInventoryControl({ productId, from, to, builderId }: {
         productId?: string;

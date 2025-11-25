@@ -17,8 +17,6 @@ var InventoryStatus;
 (function (InventoryStatus) {
     InventoryStatus["IN_STORE"] = "IN_STORE";
     InventoryStatus["ASSIGNED"] = "ASSIGNED";
-    InventoryStatus["DAMAGED"] = "DAMAGED";
-    InventoryStatus["LOST"] = "LOST";
     InventoryStatus["BROKEN"] = "BROKEN";
     InventoryStatus["OUT_FOR_REPAIR"] = "OUT_FOR_REPAIR";
 })(InventoryStatus || (exports.InventoryStatus = InventoryStatus = {}));
@@ -31,20 +29,19 @@ __decorate([
 ], InventoryItem.prototype, "id", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'uuid' }),
-    (0, typeorm_1.Index)(),
     __metadata("design:type", String)
 ], InventoryItem.prototype, "productId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => product_entity_1.Product, { nullable: true, onDelete: 'SET NULL' }),
+    (0, typeorm_1.ManyToOne)(() => product_entity_1.Product),
     (0, typeorm_1.JoinColumn)({ name: 'productId' }),
-    __metadata("design:type", Object)
+    __metadata("design:type", product_entity_1.Product)
 ], InventoryItem.prototype, "product", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "serialNumber", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 300, nullable: true }),
+    (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "siteAddress", void 0);
 __decorate([
@@ -56,7 +53,11 @@ __decorate([
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "expiryDate", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'enum', enum: InventoryStatus, default: InventoryStatus.IN_STORE }),
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: InventoryStatus,
+        default: InventoryStatus.IN_STORE,
+    }),
     __metadata("design:type", String)
 ], InventoryItem.prototype, "status", void 0);
 __decorate([
@@ -64,7 +65,7 @@ __decorate([
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "assignedToOrderId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => order_entity_1.Order, { nullable: true, onDelete: 'SET NULL' }),
+    (0, typeorm_1.ManyToOne)(() => order_entity_1.Order, { nullable: true }),
     (0, typeorm_1.JoinColumn)({ name: 'assignedToOrderId' }),
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "assignedToOrder", void 0);
@@ -73,7 +74,7 @@ __decorate([
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "condition", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "damagedAt", void 0);
 __decorate([
@@ -85,7 +86,7 @@ __decorate([
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "damageFee", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "lostAt", void 0);
 __decorate([
@@ -97,18 +98,14 @@ __decorate([
     __metadata("design:type", Object)
 ], InventoryItem.prototype, "lostFee", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'json', nullable: true }),
-    __metadata("design:type", Object)
-], InventoryItem.prototype, "extra", void 0);
-__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], InventoryItem.prototype, "createdAt", void 0);
 __decorate([
-    (0, typeorm_1.UpdateDateColumn)(),
-    __metadata("design:type", Date)
-], InventoryItem.prototype, "updatedAt", void 0);
+    (0, typeorm_1.DeleteDateColumn)({ nullable: true }),
+    __metadata("design:type", Object)
+], InventoryItem.prototype, "deletedAt", void 0);
 exports.InventoryItem = InventoryItem = __decorate([
-    (0, typeorm_1.Entity)({ name: 'inventory_items' })
+    (0, typeorm_1.Entity)('inventory_items')
 ], InventoryItem);
 //# sourceMappingURL=inventory_item.entity.js.map

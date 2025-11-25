@@ -6,7 +6,7 @@ export class AuditLog {
   id: string;
 
   @Column({ type: 'varchar', length: 100 })
-  entity: string; // e.g. 'orders', 'inventory_items'
+  entity: string;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   entityId?: string;

@@ -30,8 +30,6 @@ export class InventoryService {
     private billingService: BillingService, // ensure BillingModule imported or use forwardRef
   ) { }
 
-  // -------------------- Core Inventory Management --------------------
-
   async reserveAvailableItems(manager: EntityManager, productId: string, qty: number): Promise<InventoryItem[]> {
     if (!productId) throw new BadRequestException('productId required');
     if (!qty || qty <= 0) throw new BadRequestException('qty must be > 0');
@@ -225,7 +223,6 @@ export class InventoryService {
     return { items, total, page, limit };
   }
 
-  // -------------------- Damaged / Lost / Recovery --------------------
 
   async markDamaged(dto: MarkDamagedDto, performedBy?: string) {
     const item = await this.itemRepo.findOne({ where: { id: dto.itemId } });
@@ -256,6 +253,7 @@ export class InventoryService {
     }
     return saved;
   }
+
 
   async markLost(dto: MarkLostDto, performedBy?: string) {
     const item = await this.itemRepo.findOne({ where: { id: dto.itemId } });
