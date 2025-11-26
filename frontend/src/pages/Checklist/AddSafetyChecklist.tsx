@@ -1,202 +1,324 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import Flatpickr from "react-flatpickr";
-import "flatpickr/dist/themes/dark.css";
+import "flatpickr/dist/themes/material_green.css";
 import { useNavigate } from "react-router-dom";
+
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
 import FileInput from "../../components/form/input/FileInput";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
+import Swal from "sweetalert2";
+
+type OrderOption = {
+  id: string;
+  builderId?: string;
+  startDate?: string;
+  notes?: string;
+  items?: any[];
+};
 
 export default function AddSafetyChecklist() {
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState<"success" | "error" | "">("");
-
-  const [orders, setOrders] = useState<{ id: string; name: string }[]>([]);
+  const [orders, setOrders] = useState<OrderOption[]>([]);
   const [orderId, setOrderId] = useState("");
   const [type, setType] = useState<"Pre" | "Post">("Pre");
-  const [checkDate, setCheckDate] = useState("");
-  const [items, setItems] = useState<string[]>([]);
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [dateOfCheck, setDateOfCheck] = useState<string>("");
+  const [checklistItems, setChecklistItems] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [notes, setNotes] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [filePreviews, setFilePreviews] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
 
-  const clearError = (field: string) => {
-    setErrors((prev) => {
-      const newErrors = { ...prev };
-      delete newErrors[field];
-      return newErrors;
-    });
+  // Helper - parse server validation errors (if your backend returns e.g. { message, errors: { field: '...' } })
+  const handleServerErrors = (err: any) => {
+    if (!err) return;
+    const data = err?.response?.data;
+    if (data?.errors && typeof data.errors === "object") {
+      setErrors(data.errors);
+    } else if (data?.message) {
+      setErrors({ _global: data.message });
+    } else {
+      setErrors({ _global: "An unexpected error occurred" });
+    }
   };
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    if (!orderId) newErrors.orderId = "Order selection is required.";
-    if (!checkDate) newErrors.checkDate = "Date is required.";
-    if (!photo) newErrors.photo = "Photo is required.";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  // Fetch orders from backend
   useEffect(() => {
     const fetchOrders = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/api/orders", {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await axios.get(`${BASE_URL}orders`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
-        console.log("Fetched orders:", res.data);
-        // adjust according to actual API response
-        setOrders(res.data.data || []);
-      } catch (error) {
-        console.error("Failed to fetch orders", error);
-        setOrders([]); // fallback
+        const items = res.data?.items ?? res.data?.data ?? res.data ?? [];
+        setOrders(items);
+      } catch (err) {
+        console.error("Failed to fetch orders", err);
+        setOrders([]);
       }
     };
     fetchOrders();
   }, []);
 
-  const handleItemChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { value, checked } = e.target;
-    if (checked) setItems((prev) => [...prev, value]);
-    else setItems((prev) => prev.filter((item) => item !== value));
+  // previews
+  useEffect(() => {
+    const urls = files.map((f) => URL.createObjectURL(f));
+    setFilePreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [files]);
+
+  const clearFieldError = (field: string) => {
+    setErrors((prev) => {
+      const n = { ...prev };
+      delete n[field];
+      return n;
+    });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) setPhoto(file);
+  // toggle checklist item (example items; you can load from server)
+  const toggleItem = (key: string) => {
+    setChecklistItems((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!orderId) e.orderId = "Please select the order.";
+    if (!dateOfCheck) e.dateOfCheck = "Please pick a date.";
+    if (files.length === 0)
+      e.attachments = "Attach at least one photo as proof.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleFileChange = (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = ev.target.files ? Array.from(ev.target.files) : [];
+    setFiles((prev) => [...prev, ...selected].slice(0, 10)); // max 10
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
+    if (!validate()) return;
+
     setLoading(true);
-    setMessage("");
-    setMessageType("");
-
-    if (!validateForm()) {
-      setLoading(false);
-      return;
-    }
-
     try {
       const token = localStorage.getItem("token");
-      if (!token) throw new Error("Token not found");
+      const checklistData = {
+        type,
+        items: Object.keys(checklistItems).filter((k) => checklistItems[k]),
+        notes,
+      };
 
-      const formData = new FormData();
-      formData.append("order_id", orderId);
-      formData.append("type", type);
-      formData.append("check_date", checkDate);
-      formData.append("items", JSON.stringify(items));
-      if (photo) formData.append("photo", photo);
+      // Use multipart/form-data: checklistData as JSON string, dateOfCheck, orderId, attachments[] as files
+      const form = new FormData();
+      form.append("checklistData", JSON.stringify(checklistData));
+      form.append(
+        "dateOfCheck",
+        typeof dateOfCheck === "string"
+          ? dateOfCheck
+          : new Date(dateOfCheck).toISOString().slice(0, 10)
+      );
+      form.append("orderId", orderId);
+      for (const f of files) form.append("attachments", f);
 
-      await axios.post("http://localhost:5000/api/safety-checklists", formData, {
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+      const res = await axios.post(`${BASE_URL}checklists`, form, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+          "Content-Type": "multipart/form-data",
+        },
       });
 
-      setMessage("Checklist added successfully!");
-      setMessageType("success");
-      setTimeout(() => navigate("/safety-checklists"), 1500);
-    } catch (err) {
-      console.error(err);
-      setMessage("Failed to add checklist.");
-      setMessageType("error");
+      Swal.fire("Saved", "Safety checklist submitted", "success");
+      navigate("/safety-checklists");
+    } catch (err: any) {
+      console.error("Submit failed", err);
+      handleServerErrors(err);
+      Swal.fire(
+        "Error",
+        err?.response?.data?.message ?? "Failed to submit checklist",
+        "error"
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  // sample checklist options (you may fetch this from backend)
+  const sampleItems = [
+    { key: "helmet", label: "Helmet worn" },
+    { key: "boots", label: "Safety boots" },
+    { key: "harness", label: "Harness (where required)" },
+    { key: "clear_area", label: "Work area clear of hazards" },
+  ];
+
   return (
     <>
-      <PageBreadcrumb pageTitle="Add Safety Checklist" />
-      <ComponentCard title="Fill Checklist Details">
+      <PageBreadcrumb pageTitle="Add Safety Checklist" subName="Safety" />
+      <ComponentCard>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Order Select */}
+          {/* Order select */}
           <div>
-            <Label>Order <span style={{ color: "red" }}>*</span></Label>
+            <Label>
+              Order <span className="text-red-600">*</span>
+            </Label>
             <select
-              className="border rounded p-2 w-full"
               value={orderId}
               onChange={(e) => {
-                clearError("orderId");
+                clearFieldError("orderId");
                 setOrderId(e.target.value);
               }}
+              className="w-full border rounded p-2"
             >
-              <option value="">-- Select Order --</option>
-              {orders.map((order) => (
-                <option key={order.id} value={order.id}>
-                  {order.id}
+              <option value="">-- Select order --</option>
+              {orders.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.id}{" "}
+                  {o.startDate
+                    ? ` • ${new Date(o.startDate).toLocaleDateString()}`
+                    : ""}
                 </option>
               ))}
             </select>
-            {errors.orderId && <p className="text-red-600">{errors.orderId}</p>}
+            {errors.orderId && (
+              <p className="text-red-600 text-sm mt-1">{errors.orderId}</p>
+            )}
           </div>
 
-          {/* Pre / Post */}
-          <div>
-            <Label>Checklist Type</Label>
-            <select
-              className="border rounded p-2 w-full"
-              value={type}
-              onChange={(e) => setType(e.target.value as "Pre" | "Post")}
-            >
-              <option value="Pre">Pre</option>
-              <option value="Post">Post</option>
-            </select>
-          </div>
+          {/* Type + date */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label>Type</Label>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value as any)}
+                className="w-full border rounded p-2"
+              >
+                <option value="Pre">Pre</option>
+                <option value="Post">Post</option>
+              </select>
+            </div>
 
-          {/* Date */}
-          <div>
-            <Label>Date <span style={{ color: "red" }}>*</span></Label>
-            <Flatpickr
-              value={checkDate}
-              options={{ dateFormat: "Y-m-d" }}
-              onChange={(date) => setCheckDate(date[0])}
-              className="border rounded p-2 w-full text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900"
-            />
-            {errors.checkDate && <p className="text-red-600">{errors.checkDate}</p>}
-          </div>
-
-          {/* Checklist Items */}
-          <div>
-            <Label>Checklist Items</Label>
-            <div className="flex gap-4">
-              <label>
-                <input type="checkbox" value="helmet" onChange={handleItemChange} /> Helmet
-              </label>
-              <label>
-                <input type="checkbox" value="gloves" onChange={handleItemChange} /> Gloves
-              </label>
-              <label>
-                <input type="checkbox" value="boots" onChange={handleItemChange} /> Boots
-              </label>
+            <div className="md:col-span-2">
+              <Label>
+                Date of Check <span className="text-red-600">*</span>
+              </Label>
+              <Flatpickr
+                value={dateOfCheck}
+                options={{ dateFormat: "Y-m-d" }}
+                onChange={(dates) => {
+                  const d =
+                    dates && dates[0]
+                      ? (dates[0] as Date).toISOString().slice(0, 10)
+                      : "";
+                  setDateOfCheck(d);
+                  clearFieldError("dateOfCheck");
+                }}
+                className="w-full border rounded p-2"
+              />
+              {errors.dateOfCheck && (
+                <p className="text-red-600 text-sm mt-1">
+                  {errors.dateOfCheck}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Upload Photo */}
+          {/* checklist items */}
           <div>
-            <Label>Upload Proof Photo <span style={{ color: "red" }}>*</span></Label>
-            <FileInput onChange={handleFileChange} />
-            {errors.photo && <p className="text-red-600">{errors.photo}</p>}
+            <Label>Checklist Items</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {sampleItems.map((it) => (
+                <label key={it.key} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!!checklistItems[it.key]}
+                    onChange={() => toggleItem(it.key)}
+                  />
+                  <span className="text-sm">{it.label}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
-          {/* Submit */}
           <div>
+            <Label>Notes (optional)</Label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full border rounded p-2"
+              rows={3}
+            />
+          </div>
+
+          {/* attachments */}
+          <div>
+            <Label>
+              Attachments / Photos <span className="text-red-600">*</span>
+            </Label>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              multiple
+              onChange={handleFileChange}
+            />
+            {errors.attachments && (
+              <p className="text-red-600 text-sm mt-1">{errors.attachments}</p>
+            )}
+
+            {filePreviews.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {filePreviews.map((url, i) => (
+                  <div
+                    key={i}
+                    className="relative border rounded overflow-hidden"
+                  >
+                    <img
+                      src={url}
+                      alt={`preview-${i}`}
+                      className="w-full h-28 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeFile(i)}
+                      className="absolute top-1 right-1 bg-white p-1 rounded text-red-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* global server error */}
+          {errors._global && (
+            <div className="text-red-600 text-sm">{errors._global}</div>
+          )}
+
+          <div className="flex items-center gap-3">
             <button
               type="submit"
-              className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
+              className="px-6 py-2 bg-blue-600 text-white rounded"
               disabled={loading}
             >
-              {loading ? "Submitting..." : "Submit"}
+              {loading ? "Submitting..." : "Submit Checklist"}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="px-4 py-2 border rounded"
+            >
+              Cancel
             </button>
           </div>
-
-          {message && (
-            <p className={`text-sm mt-2 ${messageType === "success" ? "text-green-600" : "text-red-600"}`}>
-              {message}
-            </p>
-          )}
         </form>
       </ComponentCard>
     </>

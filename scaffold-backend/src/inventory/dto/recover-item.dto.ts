@@ -1,4 +1,5 @@
-import { IsOptional, IsString, IsUUID } from 'class-validator';
+// src/inventory/dto/recover-item.dto.ts
+import { IsUUID, IsOptional, IsString } from 'class-validator';
 
 export class RecoverItemDto {
   @IsUUID()
@@ -7,8 +8,4 @@ export class RecoverItemDto {
   @IsOptional()
   @IsString()
   notes?: string;
-
-  @IsOptional()
-  @IsString()
-  orderId?: string;
 }

@@ -12,15 +12,14 @@ export declare class OrdersService {
     private inventoryService;
     constructor(dataSource: DataSource, billingService: BillingService, orderRepo: Repository<Order>, orderItemRepo: Repository<OrderItem>, inventoryService: InventoryService);
     create(createDto: CreateOrderDto, createdBy?: string): Promise<Order | null>;
+    createOrderTransactional(dto: CreateOrderDto, createdBy?: string): Promise<Order | null>;
     closeOrder(orderId: string, closedBy?: string): Promise<{
         order: import("typeorm").ObjectLiteral;
-        invoice: import("../database/entities/invoice.entity").Invoice;
+        invoice: any;
     } | {
         order: import("typeorm").ObjectLiteral;
         invoice?: undefined;
     }>;
-    createOrderTransactional(dto: CreateOrderDto): Promise<Order | null>;
-    closeOrderTransactional(orderId: string): Promise<Order>;
     findOne(id: string): Promise<Order | null>;
     findAll(page?: number, limit?: number): Promise<{
         items: Order[];

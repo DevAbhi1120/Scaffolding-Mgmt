@@ -1,5 +1,5 @@
 import { Repository, DataSource } from 'typeorm';
-import { SafetyChecklist } from './safety_checklist.entity';
+import { SafetyChecklist } from '../database/entities/safety-checklist.entity';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { NotificationsService } from '../notifications/notification.service';
 export declare class ChecklistsService {
@@ -17,4 +17,8 @@ export declare class ChecklistsService {
         to?: string;
         search?: string;
     }): Promise<SafetyChecklist[]>;
+    delete(id: string): Promise<{
+        success: boolean;
+        message: string;
+    }>;
 }

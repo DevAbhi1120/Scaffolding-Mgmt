@@ -1,4 +1,5 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+// src/orders/orders.service.ts
+import { Injectable, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, EntityManager } from 'typeorm';
 import { Order, OrderStatus } from '../database/entities/order.entity';
@@ -17,61 +18,106 @@ export class OrdersService {
     private inventoryService: InventoryService,
   ) { }
 
-  // -------------------- simple create + assign --------------------
+  // Use transactional create by default to avoid partial state.
   async create(createDto: CreateOrderDto, createdBy?: string) {
-    const orderToCreate = this.orderRepo.create({
-      builderId: createDto.builderId ?? null,
-      startDate: createDto.startDate ? new Date(createDto.startDate) : undefined,
-      closeDate: createDto.closeDate ? new Date(createDto.closeDate) : undefined,
-      notes: createDto.notes ?? null,
-      items: createDto.items.map((it) => ({
-        productId: it.productId,
-        quantity: it.quantity,
-        unitPrice: it.unitPrice ?? null,
-        serialNumbers: it.serialNumbers ?? null,
-        description: it.description ?? null,
-      })),
-    } as any);
+    return this.createOrderTransactional(createDto, createdBy);
+  }
 
-    const savedRaw = await this.orderRepo.save(orderToCreate);
-    const saved: Order = Array.isArray(savedRaw) ? (savedRaw[0] as Order) : (savedRaw as Order);
+  async createOrderTransactional(dto: CreateOrderDto, createdBy?: string) {
+    if (!dto?.items?.length) throw new BadRequestException('Order must have items');
 
-    if (!saved?.id) throw new BadRequestException('Failed to create order');
+    return this.dataSource.transaction(async (manager: EntityManager) => {
+      const order = manager.create(Order, {
+        builderId: dto.builderId ?? null,
+        status: OrderStatus.CONFIRMED, // choose initial status (CONFIRMED) — adjust as needed
+        startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
+        closeDate: dto.closeDate ? new Date(dto.closeDate) : null,
+        notes: dto.notes ?? null,
+      } as any);
 
-    const orderWithItems = await this.orderRepo.findOne({ where: { id: saved.id }, relations: ['items'] });
-    if (!orderWithItems) throw new BadRequestException('Failed to load created order items');
+      const savedOrder = await manager.save(order);
+      const createdItems: OrderItem[] = [];
 
-    for (const item of orderWithItems.items) {
-      try {
-        await this.inventoryService.assignToOrder(
-          {
-            productId: item.productId,
-            orderId: saved.id,
-            serialNumbers: item.serialNumbers ?? undefined,
-            quantity: item.quantity,
-          },
-          createdBy,
-        );
-      } catch (err) {
-        throw new BadRequestException(`Failed to assign inventory for product ${item.productId}: ${(err as any)?.message ?? String(err)}`);
+      for (const it of dto.items) {
+        const productId = it.productId;
+        const quantity = Number(it.quantity);
+        if (!productId || quantity <= 0) throw new BadRequestException('Invalid order item productId/quantity');
+
+        // Reserve items in inventory (manager-aware if possible)
+        let reserved;
+        if (typeof this.inventoryService.reserveAvailableItems === 'function') {
+          // Prefer manager-aware if available (signature: (manager, productId, quantity))
+          try {
+            // Try manager-aware call
+            reserved = await (this.inventoryService as any).reserveAvailableItems(manager, productId, quantity);
+          } catch (err) {
+
+            reserved = await (this.inventoryService as any).reserveAvailableItems(productId, quantity);
+          }
+        } else {
+          throw new InternalServerErrorException('InventoryService.reserveAvailableItems not available');
+        }
+
+        if (!Array.isArray(reserved) || reserved.length < quantity) {
+          throw new BadRequestException(
+            `Insufficient inventory for product ${productId}. Required ${quantity}, available ${Array.isArray(reserved) ? reserved.length : 0}`,
+          );
+        }
+
+        const itemIds = reserved.map((r) => r.id);
+
+        const orderItem = manager.create(OrderItem, {
+          orderId: savedOrder.id,
+          productId,
+          quantity,
+          unitPrice: typeof it.unitPrice !== 'undefined' ? it.unitPrice : null,
+          description: it.description ?? null,
+          serialNumbers: it.serialNumbers ?? null,
+        } as any);
+
+        const savedItem = await manager.save(orderItem);
+        createdItems.push(savedItem);
+
+        // Assign reserved items to order (manager-aware if possible)
+        if (typeof (this.inventoryService as any).assignItemsToOrderWithManager === 'function') {
+          await (this.inventoryService as any).assignItemsToOrderWithManager(manager, itemIds, savedOrder.id, createdBy);
+        } else if (typeof (this.inventoryService as any).assignItemsToOrder === 'function') {
+          // fallback: non-manager call
+          await (this.inventoryService as any).assignItemsToOrder(itemIds, savedOrder.id, createdBy);
+        } else {
+          throw new InternalServerErrorException('InventoryService assign method not available');
+        }
       }
-    }
 
-    return this.orderRepo.findOne({ where: { id: saved.id }, relations: ['items'] });
+      // Optionally create invoice using manager-aware billing if available
+      if ((this.billingService as any).createInvoiceFromOrderWithManager) {
+        try {
+          const invoice = await (this.billingService as any).createInvoiceFromOrderWithManager(manager, savedOrder.id);
+          (savedOrder as any).invoiceId = invoice.id;
+          await manager.save(savedOrder);
+        } catch (err) {
+          // If invoice creation fails, we decide whether to rollback or continue.
+          // Here we choose to rollback (throw) so the whole transaction fails.
+          throw new BadRequestException(`Failed to create invoice: ${(err as any)?.message ?? err}`);
+        }
+      }
+
+      return manager.findOne(Order, { where: { id: savedOrder.id }, relations: ['items'] as any });
+    });
   }
 
   async closeOrder(orderId: string, closedBy?: string) {
     return this.dataSource.transaction(async (manager) => {
       const orderRepo = manager.getRepository(Order as any);
-      const order = await orderRepo.findOne({ where: { id: orderId }, relations: ['items'] });
+      const order = await orderRepo.findOne({ where: { id: orderId }, relations: ['items'] as any });
       if (!order) throw new NotFoundException('Order not found');
 
-      order.status = OrderStatus.CLOSED;
+      order.status = OrderStatus.SHIPPED;
       order.closeDate = new Date();
       await manager.save(order);
 
-      if (this.billingService.createInvoiceFromOrder) {
-        const invoice = await this.billingService.createInvoiceFromOrder(order.id);
+      if ((this.billingService as any).createInvoiceFromOrderWithManager) {
+        const invoice = await (this.billingService as any).createInvoiceFromOrderWithManager(manager, order.id);
         (order as any).invoiceId = invoice.id;
         await manager.save(order);
         return { order, invoice };
@@ -81,69 +127,6 @@ export class OrdersService {
     });
   }
 
-  // -------------------- manager-aware transactional create --------------------
-  async createOrderTransactional(dto: CreateOrderDto) {
-    if (!dto?.items?.length) throw new BadRequestException('Order must have items');
-
-    return this.dataSource.transaction(async (manager: EntityManager) => {
-      const order = manager.create(Order, {
-        builderId: dto.builderId ?? null,
-        status: OrderStatus.OPEN,
-        startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
-        closeDate: dto.closeDate ? new Date(dto.closeDate) : null,
-        notes: dto.notes ?? null,
-      } as any);
-
-      const savedOrder = await manager.save(order);
-      const createdItems: OrderItem[] = [];
-      const allAssignedItemIds: string[] = [];
-
-      for (const it of dto.items) {
-        const productId = it.productId;
-        const quantity = Number(it.quantity);
-        if (!productId || quantity <= 0) throw new BadRequestException('Invalid order item productId/quantity');
-
-        const reserved = await this.inventoryService.reserveAvailableItems(manager, productId, quantity);
-        if (reserved.length < quantity) {
-          throw new BadRequestException(`Insufficient inventory for product ${productId}. Required ${quantity}, available ${reserved.length}`);
-        }
-
-        const itemIds = reserved.map((r) => r.id);
-        allAssignedItemIds.push(...itemIds);
-
-        const orderItem = manager.create(OrderItem, {
-          orderId: savedOrder.id,
-          productId,
-          quantity,
-          unitPrice: it.unitPrice ?? 0,
-          description: it.description ?? null,
-        } as any);
-
-        createdItems.push(await manager.save(orderItem));
-        await this.inventoryService.assignItemsToOrderWithManager(manager, itemIds, savedOrder.id);
-      }
-
-      return manager.findOne(Order, { where: { id: savedOrder.id }, relations: ['items'] as any });
-    });
-  }
-
-  async closeOrderTransactional(orderId: string) {
-    return this.dataSource.transaction(async (manager) => {
-      const order = await manager.findOne(Order, { where: { id: orderId }, relations: ['items'] as any });
-      if (!order) throw new NotFoundException('Order not found');
-
-      order.status = OrderStatus.CLOSED;
-      order.closeDate = new Date();
-      await manager.save(order);
-
-      // Optional: manager-aware invoice creation
-      // await this.billingService.createInvoiceFromOrderWithManager(manager, order);
-
-      return order;
-    });
-  }
-
-  // -------------------- Simple finders --------------------
   async findOne(id: string) {
     return this.orderRepo.findOne({ where: { id }, relations: ['items'] });
   }
@@ -152,7 +135,7 @@ export class OrdersService {
     const [items, total] = await this.orderRepo.findAndCount({
       skip: (page - 1) * limit,
       take: limit,
-      relations: ['items'],
+      relations: [], // return lightweight list; fetch items separately if needed
       order: { createdAt: 'DESC' },
     });
     return { items, total, page, limit };

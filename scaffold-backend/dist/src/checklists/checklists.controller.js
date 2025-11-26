@@ -14,65 +14,119 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChecklistsController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer_1 = require("multer");
+const path_1 = require("path");
+const uuid_1 = require("uuid");
 const checklists_service_1 = require("./checklists.service");
-const create_checklist_dto_1 = require("./dto/create-checklist.dto");
-const query_checklist_dto_1 = require("./dto/query-checklist.dto");
-const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
-const roles_guard_1 = require("../common/guards/roles.guard");
-const roles_decorator_1 = require("../common/decorators/roles.decorator");
 let ChecklistsController = class ChecklistsController {
-    constructor(svc) {
+    constructor(svc, filesService) {
         this.svc = svc;
+        this.filesService = filesService;
     }
-    async create(dto) {
-        return this.svc.create(dto);
+    async create(body, files) {
+        let checklistData;
+        try {
+            checklistData = typeof body.checklistData === 'string' ? JSON.parse(body.checklistData) : body.checklistData;
+        }
+        catch (e) {
+            throw new common_1.BadRequestException('Invalid checklistData JSON');
+        }
+        const dto = {
+            orderId: body.orderId ?? null,
+            submittedBy: body.submittedBy ?? null,
+            checklistData,
+            dateOfCheck: body.dateOfCheck ?? body.check_date ?? body.checkDate,
+            attachments: [],
+            preserved: body.preserved === 'false' ? false : body.preserved === 'true' ? true : body.preserved ?? true,
+        };
+        if (files && files.length > 0) {
+            const uploaded = await this.filesService.uploadMany(files);
+            dto.attachments = uploaded.map((u) => u.key || u.url || String(u));
+        }
+        const saved = await this.svc.create(dto);
+        return saved;
     }
-    async listByOrder(orderId) {
+    async list(q) {
+        const filters = {};
+        if (q.orderId)
+            filters.orderId = q.orderId;
+        if (q.builderId)
+            filters.builderId = q.builderId;
+        if (q.from)
+            filters.from = q.from;
+        if (q.to)
+            filters.to = q.to;
+        if (q.search)
+            filters.search = q.search;
+        return this.svc.search(filters);
+    }
+    async byOrder(orderId) {
         return this.svc.findByOrder(orderId);
     }
-    async get(id) {
+    async getOne(id) {
         return this.svc.get(id);
     }
-    async search(q) {
-        return this.svc.search(q);
+    async delete(id) {
+        return this.svc.delete(id);
     }
 };
 exports.ChecklistsController = ChecklistsController;
 __decorate([
     (0, common_1.Post)(),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('attachments', 10, {
+        storage: (0, multer_1.diskStorage)({
+            destination: (req, file, cb) => cb(null, './uploads/checklists'),
+            filename: (req, file, cb) => {
+                const id = (0, uuid_1.v4)();
+                const ext = (0, path_1.extname)(file.originalname) || '';
+                cb(null, `${id}${ext}`);
+            },
+        }),
+        fileFilter: (req, file, cb) => {
+            const allowed = /jpeg|jpg|png|gif|pdf/;
+            const ok = allowed.test(file.mimetype);
+            cb(ok ? null : new common_1.BadRequestException('Only images/pdf allowed'), ok);
+        },
+        limits: { fileSize: 10 * 1024 * 1024 },
+    })),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.UploadedFiles)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_checklist_dto_1.CreateChecklistDto]),
+    __metadata("design:paramtypes", [Object, Array]),
     __metadata("design:returntype", Promise)
 ], ChecklistsController.prototype, "create", null);
 __decorate([
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ChecklistsController.prototype, "list", null);
+__decorate([
     (0, common_1.Get)('order/:orderId'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('orderId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
-], ChecklistsController.prototype, "listByOrder", null);
+], ChecklistsController.prototype, "byOrder", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
-], ChecklistsController.prototype, "get", null);
+], ChecklistsController.prototype, "getOne", null);
 __decorate([
-    (0, common_1.Get)(),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('ADMIN', 'SUPER_ADMIN'),
-    __param(0, (0, common_1.Query)()),
+    (0, common_1.Delete)(':id'),
+    __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [query_checklist_dto_1.QueryChecklistDto]),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
-], ChecklistsController.prototype, "search", null);
+], ChecklistsController.prototype, "delete", null);
 exports.ChecklistsController = ChecklistsController = __decorate([
     (0, common_1.Controller)('checklists'),
-    __metadata("design:paramtypes", [checklists_service_1.ChecklistsService])
+    __param(1, (0, common_1.Inject)('FilesService')),
+    __metadata("design:paramtypes", [checklists_service_1.ChecklistsService, Object])
 ], ChecklistsController);
 //# sourceMappingURL=checklists.controller.js.map

@@ -1,3 +1,4 @@
+// src/orders/dto/create-order.dto.ts
 import {
   IsOptional,
   IsUUID,
@@ -8,19 +9,24 @@ import {
   Min,
   IsString,
   ValidateNested,
+  IsInt,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { MaxDecimalPlaces } from '../../utils/validators/max-decimal-places';
 
 export class CreateOrderItemDto {
   @IsUUID()
   productId: string;
 
+  // Use transform: true in ValidationPipe so incoming strings are converted
   @IsNumber()
+  @IsInt()
   @Min(1)
   quantity: number;
 
   @IsOptional()
   @IsNumber()
+  @MaxDecimalPlaces(2)
   unitPrice?: number;
 
   @IsOptional()

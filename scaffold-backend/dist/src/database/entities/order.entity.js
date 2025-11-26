@@ -14,8 +14,10 @@ const typeorm_1 = require("typeorm");
 const order_item_entity_1 = require("./order-item.entity");
 var OrderStatus;
 (function (OrderStatus) {
-    OrderStatus["OPEN"] = "OPEN";
-    OrderStatus["CLOSED"] = "CLOSED";
+    OrderStatus["DRAFT"] = "DRAFT";
+    OrderStatus["CONFIRMED"] = "CONFIRMED";
+    OrderStatus["SHIPPED"] = "SHIPPED";
+    OrderStatus["CANCELLED"] = "CANCELLED";
 })(OrderStatus || (exports.OrderStatus = OrderStatus = {}));
 let Order = class Order {
 };
@@ -25,20 +27,21 @@ __decorate([
     __metadata("design:type", String)
 ], Order.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    (0, typeorm_1.Column)({ type: 'varchar', length: 36, nullable: true }),
     __metadata("design:type", Object)
 ], Order.prototype, "builderId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'enum', enum: OrderStatus, default: OrderStatus.OPEN }),
+    (0, typeorm_1.Column)({ type: 'enum', enum: OrderStatus, default: OrderStatus.DRAFT }),
+    (0, typeorm_1.Index)(),
     __metadata("design:type", String)
 ], Order.prototype, "status", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'date', nullable: true }),
-    __metadata("design:type", Date)
+    __metadata("design:type", Object)
 ], Order.prototype, "startDate", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'date', nullable: true }),
-    __metadata("design:type", Date)
+    __metadata("design:type", Object)
 ], Order.prototype, "closeDate", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'date', nullable: true }),
@@ -53,11 +56,11 @@ __decorate([
     __metadata("design:type", Array)
 ], Order.prototype, "items", void 0);
 __decorate([
-    (0, typeorm_1.CreateDateColumn)(),
+    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp' }),
     __metadata("design:type", Date)
 ], Order.prototype, "createdAt", void 0);
 __decorate([
-    (0, typeorm_1.UpdateDateColumn)(),
+    (0, typeorm_1.UpdateDateColumn)({ type: 'timestamp' }),
     __metadata("design:type", Date)
 ], Order.prototype, "updatedAt", void 0);
 exports.Order = Order = __decorate([

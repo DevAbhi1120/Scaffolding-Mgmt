@@ -17,15 +17,15 @@ exports.CreateChecklistDto = CreateChecklistDto;
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsUUID)(),
-    __metadata("design:type", String)
+    __metadata("design:type", Object)
 ], CreateChecklistDto.prototype, "orderId", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsUUID)(),
-    __metadata("design:type", String)
+    __metadata("design:type", Object)
 ], CreateChecklistDto.prototype, "submittedBy", void 0);
 __decorate([
-    (0, class_validator_1.IsObject)(),
+    (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", Object)
 ], CreateChecklistDto.prototype, "checklistData", void 0);
 __decorate([
@@ -35,6 +35,11 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
 ], CreateChecklistDto.prototype, "attachments", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], CreateChecklistDto.prototype, "preserved", void 0);
 //# sourceMappingURL=create-checklist.dto.js.map

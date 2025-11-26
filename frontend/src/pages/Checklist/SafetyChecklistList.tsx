@@ -1,3 +1,4 @@
+// src/pages/SafetyChecklist/SafetyChecklistList.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -15,112 +16,132 @@ import {
   TableRow,
 } from "../../components/ui/table";
 
-import { TrashBinIcon, PencilIcon } from "../../icons";
+import { TrashBinIcon, PencilIcon, DownloadIcon } from "../../icons";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
 
-interface SafetyChecklist {
-  id: number;
-  order_id: number;
-  type: "Pre" | "Post";
-  check_date: string;
-  photo_url?: string;
-  items?: string; 
-  created_at: string;
-  updated_at: string;
-}
+type ChecklistEntity = {
+  id: string;
+  orderId?: string | null;
+  checklistData?: any;
+  dateOfCheck?: string;
+  attachments?: string[] | null;
+  preserved?: boolean;
+  createdAt?: string;
+};
 
 export default function SafetyChecklistList() {
   const navigate = useNavigate();
-  const [checklists, setChecklists] = useState<SafetyChecklist[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [items, setItems] = useState<ChecklistEntity[]>([]);
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const fetchChecklists = async () => {
+  const fetch = async () => {
+    setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/api/safety-checklists/", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const res = await axios.get(`${BASE_URL}checklists`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-
-      if (res.data.success) {
-        setChecklists(res.data.data || []);
-      }
-    } catch (error) {
-      console.error("Failed to fetch safety checklists", error);
+      // backend returns array or object — handle both shapes
+      const list: ChecklistEntity[] = Array.isArray(res.data)
+        ? res.data
+        : res.data.items ?? res.data;
+      setItems(list);
+    } catch (err) {
+      console.error("Failed to load checklists", err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchChecklists();
+    fetch();
   }, []);
 
-  const handleEdit = (id: number) => {
-    navigate(`/edit-safety-checklists/${id}`);
-  };
+  const handleEdit = (id: string) => navigate(`/edit-safety-checklist/${id}`);
 
-  const handleDelete = async (id: number) => {
-    const result = await Swal.fire({
-      title: "Are you sure?",
-      text: "This action cannot be undone!",
+  const handleDelete = async (id: string) => {
+    const r = await Swal.fire({
+      title: "Delete checklist?",
+      text: "This action cannot be undone",
       icon: "warning",
       showCancelButton: true,
+      confirmButtonText: "Delete",
       confirmButtonColor: "#d33",
-      cancelButtonColor: "#3085d6",
-      confirmButtonText: "Yes, delete it!",
     });
+    if (!r.isConfirmed) return;
 
-    if (result.isConfirmed) {
-      try {
-        const token = localStorage.getItem("token");
-        await axios.delete(`http://localhost:5000/api/safety-checklists/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        Swal.fire("Deleted!", "Checklist has been deleted.", "success");
-        setChecklists(checklists.filter((c) => c.id !== id));
-      } catch (error) {
-        console.error("Delete error:", error);
-        Swal.fire("Error!", "Something went wrong.", "error");
-      }
+    try {
+      const token = localStorage.getItem("token");
+      await axios.delete(`${BASE_URL}checklists/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      Swal.fire("Deleted", "Checklist removed", "success");
+      setItems((s) => s.filter((c) => c.id !== id));
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Failed to delete checklist", "error");
     }
   };
 
-  const filteredChecklists = checklists.filter((c) =>
-    `${c.type} ${c.order_id} ${c.check_date}`
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase())
-  );
+  // Smart function to build a usable URL for an attachment key
+  const buildFileUrl = (key: string) => {
+    if (!key) return "";
+    // If key is an absolute URL already
+    if (key.startsWith("http://") || key.startsWith("https://")) return key;
+    // Local uploads usually store "/uploads/..." paths — make absolute
+    if (key.startsWith("/")) return `${window.location.origin}${key}`;
+    // s3-like or other keys: route through our files download endpoint
+    return `${BASE_URL}files/download/${encodeURIComponent(key)}`;
+  };
+
+  // Search filter
+  const filtered = items.filter((c) => {
+    const type = c.checklistData?.type ?? "";
+    const orderId = c.orderId ?? "";
+    const date = c.dateOfCheck ?? c.createdAt ?? "";
+    return `${type} ${orderId} ${date}`.toLowerCase().includes(q.toLowerCase());
+  });
 
   return (
     <>
-      <PageMeta
-        title="Safety Checklist List | Scaffolding Management"
-        description="All safety checklists"
-      />
+      <PageMeta title="Safety Checklists" />
       <PageBreadcrumb pageTitle="Safety Checklists" />
       <div className="space-y-6">
         <ComponentCard title="All Safety Checklists">
-          <div className="flex justify-end items-center mb-4 gap-3">
-            <input
-              type="text"
-              placeholder="Search checklist..."
-              className="w-72 px-4 py-2 border rounded-lg focus:ring focus:ring-blue-300 
-               placeholder-gray-400 dark:placeholder-gray-500
-               text-gray-900 dark:text-gray-100
-               bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Search by order, type or date..."
+                className="px-3 py-2 border rounded w-full md:w-96 focus:ring focus:ring-blue-300"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => navigate("/add-safety-checklist")}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                + Add Checklist
+              </button>
+              <button
+                onClick={() => fetch()}
+                className="px-3 py-2 bg-gray-100 rounded hover:bg-gray-200"
+              >
+                Refresh
+              </button>
+            </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
+
+          <div className="overflow-hidden rounded-lg border">
             <div className="max-w-full overflow-x-auto">
               <Table>
                 <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                   <TableRow>
                     <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
-                      Order ID
+                      Order
                     </TableCell>
                     <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
                       Type
@@ -129,61 +150,108 @@ export default function SafetyChecklistList() {
                       Date
                     </TableCell>
                     <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
-                      Photo
+                      Attachments
                     </TableCell>
                     <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
-                      Items
+                      Created
                     </TableCell>
                     <TableCell className="px-5 py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
                       Actions
                     </TableCell>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {filteredChecklists.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">{c.order_id}</TableCell>
-                      <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">{c.type}</TableCell>
-                      <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">{c.check_date ? c.check_date.split("T")[0].split("-").reverse().join("-") : "—"}</TableCell>
-                      <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
-                        <div className="w-12 h-12 rounded overflow-hidden bg-gray-100">
-                          <img
-                            src={c.photo_url ? `${c.photo_url}` : "/images/no-image.png"}
-                            alt="Photo"
-                            className="object-cover w-full h-full"
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
-                        {(() => {
-                          try {
-                            if (!c.items) return "—";
-                            const parsed = typeof c.items === "string" ? JSON.parse(c.items) : c.items;
-                            return Array.isArray(parsed) ? parsed.join(", ") : String(parsed);
-                          } catch (err) {
-                            console.error("Invalid items JSON:", c.items, err);
-                            return String(c.items);
-                          }
-                        })()}
-                      </TableCell>
-                      <TableCell className="px-5 py-4 text-start text-sm text-gray-800 dark:text-white/90">
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => handleEdit(c.id)}
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            <PencilIcon className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(c.id)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <TrashBinIcon className="w-5 h-5" />
-                          </button>
-                        </div>
+
+                <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="p-6 text-center">
+                        Loading...
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="p-6 text-center text-gray-500"
+                      >
+                        No checklists found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.map((c) => {
+                      const type = c.checklistData?.type ?? "—";
+                      const items = Array.isArray(c.checklistData?.items)
+                        ? c.checklistData.items.join(", ")
+                        : c.checklistData?.items ?? "—";
+                      const date = c.dateOfCheck
+                        ? new Date(c.dateOfCheck).toLocaleDateString()
+                        : "—";
+                      const created = c.createdAt
+                        ? new Date(c.createdAt).toLocaleString()
+                        : "—";
+                      return (
+                        <TableRow key={c.id}>
+                          <TableCell className="px-5 py-4 text-start">
+                            {c.orderId ?? "—"}
+                          </TableCell>
+                          <TableCell className="px-5 py-4 text-start">
+                            {type}
+                          </TableCell>
+                          <TableCell className="px-5 py-4 text-start">
+                            {date}
+                          </TableCell>
+                          <TableCell className="px-5 py-4 text-start">
+                            <div className="flex flex-wrap gap-2">
+                              {c.attachments && c.attachments.length > 0 ? (
+                                c.attachments.map((a, i) => (
+                                  <>
+                                    <img
+                                      src={BASE_IMAGE_URL + a}
+                                      alt={a}
+                                      className="object-cover w-16 h-16 rounded"
+                                    />
+                                    <a
+                                      key={i}
+                                      href={buildFileUrl(BASE_IMAGE_URL + a)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-sm px-2 py-1 border rounded flex items-center gap-2 hover:bg-gray-50"
+                                      title={a.split("/").pop()}
+                                    >
+                                      <DownloadIcon className="w-4 h-4" />
+                                    </a>
+                                  </>
+                                ))
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-5 py-4 text-start">
+                            {created}
+                          </TableCell>
+                          <TableCell className="px-5 py-4 text-start">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleEdit(c.id)}
+                                className="text-blue-600 hover:text-blue-800"
+                                title="Edit"
+                              >
+                                <PencilIcon className="w-5 h-5" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(c.id)}
+                                className="text-red-600 hover:text-red-800"
+                                title="Delete"
+                              >
+                                <TrashBinIcon className="w-5 h-5" />
+                              </button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </div>

@@ -5,19 +5,26 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
 import Input from "../../components/form/input/InputField";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
+
+type Product = {
+  id: string;
+  name: string;
+  images?: string[];
+};
 
 export default function EditInventory() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
   const navigate = useNavigate();
-  const { id } = useParams(); // inventoryId
+  const { id } = useParams<{ id: string }>(); // inventory id
 
   // Dropdown data
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
-  // Inventory fields
-  const [productId, setProductId] = useState<number | "">("");
+  // Inventory fields (productId must be string UUID)
+  const [productId, setProductId] = useState<string>("");
   const [openingStock, setOpeningStock] = useState<number | "">("");
   const [stockIn, setStockIn] = useState<number | "">("");
   const [stockOut, setStockOut] = useState<number | "">("");
@@ -27,61 +34,73 @@ export default function EditInventory() {
   // errors state
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const parseNum = (val: any) => (val === "" ? 0 : Number(val));
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const parseNum = (val: any) =>
+    val === "" || val === null || typeof val === "undefined" ? 0 : Number(val);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-
+    // load products + inventory
     const fetchProducts = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/products", {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await axios.get(`${BASE_URL}products`, {
+          headers: authHeaders,
         });
-        if (res.data.success) setProducts(res.data.products || []);
+        const items = res.data?.items ?? res.data?.data ?? [];
+        setProducts(items);
       } catch (err) {
         console.error("Failed to fetch products", err);
       }
     };
 
     const fetchInventory = async () => {
+      if (!id) return;
+      setLoading(true);
       try {
-        const res = await axios.get(`http://localhost:5000/api/inventories/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await axios.get(`${BASE_URL}inventories/${id}`, {
+          headers: authHeaders,
         });
-        if (res.data) {
-          const inv = res.data;
-          setProductId(inv.product_id ?? "");
-          setOpeningStock(inv.opening_stock ?? "");
-          setStockIn(inv.stock_in ?? "");
-          setStockOut(inv.stock_out ?? "");
-          setMissing(inv.missing ?? "");
-          setDamaged(inv.damaged ?? "");
-        }
+        const inv = res.data;
+        // adapt to common shapes
+        // server may return { data: inv } or inv directly — handle both.
+        const payload = inv?.data ?? inv;
+        setProductId(payload?.product_id ?? payload?.productId ?? "");
+        setOpeningStock(payload?.opening_stock ?? payload?.openingStock ?? "");
+        setStockIn(payload?.stock_in ?? payload?.stockIn ?? "");
+        setStockOut(payload?.stock_out ?? payload?.stockOut ?? "");
+        setMissing(payload?.missing ?? "");
+        setDamaged(payload?.damaged ?? "");
       } catch (err) {
         console.error("Failed to fetch inventory", err);
+        setMessage("Failed to load inventory.");
+        setMessageType("error");
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchProducts();
     fetchInventory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const clearError = (field: string) => {
     setErrors((prev) => {
-      const newErrors = { ...prev };
-      delete newErrors[field];
-      return newErrors;
+      const next = { ...prev };
+      delete next[field];
+      return next;
     });
   };
-  // ✅ Validation
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!productId) newErrors.productId = "Please select a product.";
-    if (openingStock === "") newErrors.openingStock = "Opening stock is required.";
+    if (openingStock === "")
+      newErrors.openingStock = "Opening stock is required.";
     if (stockIn === "") newErrors.stockIn = "Stock In is required.";
-    // if (stockOut === "") newErrors.stockOut = "Stock Out is required.";
-    // if (missing === "") newErrors.missing = "Missing is required.";
-    // if (damaged === "") newErrors.damaged = "Damaged is required.";
+    // optional: you may require stockOut/missing/damaged depending on business logic
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -89,92 +108,123 @@ export default function EditInventory() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setMessage("");
     setMessageType("");
+    if (!validateForm()) return;
 
-    if (!validateForm()) {
-      setLoading(false);
+    if (!id) {
+      setMessage("Missing inventory id.");
+      setMessageType("error");
       return;
     }
 
+    setLoading(true);
     try {
-      const token = localStorage.getItem("token");
       if (!token) {
         setMessage("Authentication token not found.");
+        setMessageType("error");
         setLoading(false);
         return;
       }
 
       const payload = {
         product_id: productId,
-        opening_stock: openingStock || 0,
-        stock_in: stockIn || 0,
-        stock_out: stockOut || 0,
-        missing: missing || 0,
-        damaged: damaged || 0,
+        opening_stock: parseNum(openingStock),
+        stock_in: parseNum(stockIn),
+        stock_out: parseNum(stockOut),
+        missing: parseNum(missing),
+        damaged: parseNum(damaged),
       };
 
-      await axios.put(`http://localhost:5000/api/inventories/${id}`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
+      await axios.put(`${BASE_URL}inventories/${id}`, payload, {
+        headers: authHeaders,
       });
 
       setMessage("Inventory updated successfully!");
       setMessageType("success");
-      setTimeout(() => navigate("/inventory-list"), 1500);
-    } catch (error) {
-      setMessage("Failed to update inventory.");
+      setTimeout(() => navigate("/inventory-list"), 1000);
+    } catch (err: any) {
+      console.error("Update failed:", err);
+      setMessage(err?.response?.data?.message ?? "Failed to update inventory.");
       setMessageType("error");
     } finally {
       setLoading(false);
     }
   };
 
+  const selectedProduct = products.find((p) => p.id === productId);
+
   return (
     <>
       <PageBreadcrumb pageTitle="Edit Inventory" />
-      <ComponentCard title="Update input fields">
+      <ComponentCard title="Update inventory">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Product select */}
+          {/* Product select (locked) */}
           <div>
             <Label>
-              Select Product<span style={{ color: "red" }}> *</span>
+              Product <span className="text-red-600">*</span>
             </Label>
-            <select
-              value={productId}
-              disabled   
-              className="w-full border border-gray-300 rounded-md p-2 bg-gray-100 cursor-not-allowed"
-            >
-              <option value="">-- Select Product --</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
 
-            {/* 👇 Hidden field to actually submit value */}
-            <input type="hidden" name="product_id" value={productId} />
+            <div className="flex items-center gap-3">
+              {selectedProduct?.images?.[0] ? (
+                <img
+                  src={`${BASE_IMAGE_URL}${selectedProduct.images[0]}`}
+                  alt={selectedProduct.name}
+                  className="w-14 h-14 rounded object-cover"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded bg-gray-100 flex items-center justify-center text-gray-400">
+                  No
+                </div>
+              )}
 
-            {errors.productId && (
-              <p className="text-red-600 text-sm">{errors.productId}</p>
+              <div className="flex-1">
+                <select
+                  value={productId}
+                  onChange={(e) => {
+                    setProductId(e.target.value);
+                    clearError("productId");
+                  }}
+                  className="w-full border rounded-md p-2 bg-white"
+                >
+                  <option value="">-- Select Product --</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                {errors.productId && (
+                  <p className="text-red-600 text-sm mt-1">
+                    {errors.productId}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <Label>
+              Opening Stock <span className="text-red-600">*</span>
+            </Label>
+            <Input
+              type="number"
+              value={openingStock}
+              onChange={(e) => {
+                clearError("openingStock");
+                const v = e.target.value;
+                setOpeningStock(v === "" ? "" : Math.max(0, Number(v)));
+              }}
+            />
+            {errors.openingStock && (
+              <p className="text-red-600 text-sm">{errors.openingStock}</p>
             )}
           </div>
 
           <div>
-            <Label>Opening Stock<span style={{ color: "red" }}> *</span></Label>
-            <Input
-              type="number"
-              value={openingStock}
-              onChange={(e) =>
-                setOpeningStock(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))
-              }
-            />
-            {errors.openingStock && <p className="text-red-600 text-sm">{errors.openingStock}</p>}
-          </div>
-
-          <div>
-            <Label>Stock In<span style={{ color: "red" }}> *</span></Label>
+            <Label>
+              Stock In <span className="text-red-600">*</span>
+            </Label>
             <Input
               type="number"
               value={stockIn}
@@ -183,11 +233,18 @@ export default function EditInventory() {
                 const val = e.target.value;
                 if (val === "") return setStockIn("");
                 const newVal = Number(val);
-                const total = newVal + parseNum(stockOut) + parseNum(missing) + parseNum(damaged);
-                if (total <= parseNum(openingStock)) setStockIn(Math.max(0, newVal));
+                const total =
+                  newVal +
+                  parseNum(stockOut) +
+                  parseNum(missing) +
+                  parseNum(damaged);
+                if (total <= parseNum(openingStock))
+                  setStockIn(Math.max(0, newVal));
               }}
             />
-            {errors.stockIn && <p className="text-red-600 text-sm">{errors.stockIn}</p>}
+            {errors.stockIn && (
+              <p className="text-red-600 text-sm">{errors.stockIn}</p>
+            )}
           </div>
 
           <div>
@@ -200,11 +257,18 @@ export default function EditInventory() {
                 const val = e.target.value;
                 if (val === "") return setStockOut("");
                 const newVal = Number(val);
-                const total = parseNum(stockIn) + newVal + parseNum(missing) + parseNum(damaged);
-                if (total <= parseNum(openingStock)) setStockOut(Math.max(0, newVal));
+                const total =
+                  parseNum(stockIn) +
+                  newVal +
+                  parseNum(missing) +
+                  parseNum(damaged);
+                if (total <= parseNum(openingStock))
+                  setStockOut(Math.max(0, newVal));
               }}
             />
-            {errors.stockOut && <p className="text-red-600 text-sm">{errors.stockOut}</p>}
+            {errors.stockOut && (
+              <p className="text-red-600 text-sm">{errors.stockOut}</p>
+            )}
           </div>
 
           <div>
@@ -212,19 +276,23 @@ export default function EditInventory() {
             <Input
               type="number"
               value={missing}
-              // onChange={(e) =>
-              //   setMissing(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))
-              // }
               onChange={(e) => {
                 clearError("missing");
                 const val = e.target.value;
                 if (val === "") return setMissing("");
                 const newVal = Number(val);
-                const total = parseNum(stockIn) + parseNum(stockOut) + newVal + parseNum(damaged);
-                if (total <= parseNum(openingStock)) setMissing(Math.max(0, newVal));
+                const total =
+                  parseNum(stockIn) +
+                  parseNum(stockOut) +
+                  newVal +
+                  parseNum(damaged);
+                if (total <= parseNum(openingStock))
+                  setMissing(Math.max(0, newVal));
               }}
             />
-            {errors.missing && <p className="text-red-600 text-sm">{errors.missing}</p>}
+            {errors.missing && (
+              <p className="text-red-600 text-sm">{errors.missing}</p>
+            )}
           </div>
 
           <div>
@@ -232,33 +300,49 @@ export default function EditInventory() {
             <Input
               type="number"
               value={damaged}
-              // onChange={(e) =>
-              //   setDamaged(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))
-              // }
               onChange={(e) => {
                 clearError("damaged");
                 const val = e.target.value;
                 if (val === "") return setDamaged("");
                 const newVal = Number(val);
-                const total = parseNum(stockIn) + parseNum(stockOut) + parseNum(missing) + newVal;
-                if (total <= parseNum(openingStock)) setDamaged(Math.max(0, newVal));
+                const total =
+                  parseNum(stockIn) +
+                  parseNum(stockOut) +
+                  parseNum(missing) +
+                  newVal;
+                if (total <= parseNum(openingStock))
+                  setDamaged(Math.max(0, newVal));
               }}
             />
-            {errors.damaged && <p className="text-red-600 text-sm">{errors.damaged}</p>}
+            {errors.damaged && (
+              <p className="text-red-600 text-sm">{errors.damaged}</p>
+            )}
           </div>
 
-          <div>
+          <div className="flex items-center gap-3">
             <button
               type="submit"
-              className="px-6 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
               disabled={loading}
             >
               {loading ? "Updating..." : "Update"}
             </button>
+
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="px-4 py-2 border rounded-md"
+            >
+              Cancel
+            </button>
           </div>
 
           {message && (
-            <p className={`text-sm ${messageType === "success" ? "text-green-600" : "text-red-600"}`}>
+            <p
+              className={`text-sm ${
+                messageType === "success" ? "text-green-600" : "text-red-600"
+              }`}
+            >
               {message}
             </p>
           )}

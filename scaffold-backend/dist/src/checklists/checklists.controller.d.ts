@@ -1,11 +1,14 @@
 import { ChecklistsService } from './checklists.service';
-import { CreateChecklistDto } from './dto/create-checklist.dto';
-import { QueryChecklistDto } from './dto/query-checklist.dto';
 export declare class ChecklistsController {
-    private svc;
-    constructor(svc: ChecklistsService);
-    create(dto: CreateChecklistDto): Promise<import("./safety_checklist.entity").SafetyChecklist>;
-    listByOrder(orderId: string): Promise<import("./safety_checklist.entity").SafetyChecklist[]>;
-    get(id: string): Promise<import("./safety_checklist.entity").SafetyChecklist>;
-    search(q: QueryChecklistDto): Promise<import("./safety_checklist.entity").SafetyChecklist[]>;
+    private readonly svc;
+    private readonly filesService;
+    constructor(svc: ChecklistsService, filesService: any);
+    create(body: any, files?: Express.Multer.File[]): Promise<import("../database/entities/safety-checklist.entity").SafetyChecklist>;
+    list(q: any): Promise<import("../database/entities/safety-checklist.entity").SafetyChecklist[]>;
+    byOrder(orderId: string): Promise<import("../database/entities/safety-checklist.entity").SafetyChecklist[]>;
+    getOne(id: string): Promise<import("../database/entities/safety-checklist.entity").SafetyChecklist>;
+    delete(id: string): Promise<{
+        success: boolean;
+        message: string;
+    }>;
 }

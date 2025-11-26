@@ -13,6 +13,7 @@ exports.OrderItem = void 0;
 const typeorm_1 = require("typeorm");
 const product_entity_1 = require("./product.entity");
 const order_entity_1 = require("./order.entity");
+const decimal_transformer_1 = require("./decimal-transformer");
 let OrderItem = class OrderItem {
 };
 exports.OrderItem = OrderItem;
@@ -21,7 +22,7 @@ __decorate([
     __metadata("design:type", String)
 ], OrderItem.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'uuid' }),
+    (0, typeorm_1.Column)({ type: 'varchar', length: 36 }),
     __metadata("design:type", String)
 ], OrderItem.prototype, "orderId", void 0);
 __decorate([
@@ -30,11 +31,11 @@ __decorate([
     __metadata("design:type", order_entity_1.Order)
 ], OrderItem.prototype, "order", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'uuid' }),
+    (0, typeorm_1.Column)({ type: 'varchar', length: 36 }),
     __metadata("design:type", String)
 ], OrderItem.prototype, "productId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => product_entity_1.Product, { eager: true }),
+    (0, typeorm_1.ManyToOne)(() => product_entity_1.Product, { eager: false }),
     (0, typeorm_1.JoinColumn)({ name: 'productId' }),
     __metadata("design:type", product_entity_1.Product)
 ], OrderItem.prototype, "product", void 0);
@@ -44,18 +45,24 @@ __decorate([
 ], OrderItem.prototype, "quantity", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'json', nullable: true }),
-    __metadata("design:type", Array)
+    __metadata("design:type", Object)
 ], OrderItem.prototype, "serialNumbers", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'decimal', precision: 10, scale: 2, nullable: true }),
-    __metadata("design:type", Number)
+    (0, typeorm_1.Column)({
+        type: 'decimal',
+        precision: 12,
+        scale: 2,
+        nullable: true,
+        transformer: decimal_transformer_1.DecimalTransformer,
+    }),
+    __metadata("design:type", Object)
 ], OrderItem.prototype, "unitPrice", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'text', nullable: true }),
-    __metadata("design:type", String)
+    __metadata("design:type", Object)
 ], OrderItem.prototype, "description", void 0);
 __decorate([
-    (0, typeorm_1.CreateDateColumn)(),
+    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp' }),
     __metadata("design:type", Date)
 ], OrderItem.prototype, "createdAt", void 0);
 exports.OrderItem = OrderItem = __decorate([

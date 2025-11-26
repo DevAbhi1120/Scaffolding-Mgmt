@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateOrderDto = exports.CreateOrderItemDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
+const max_decimal_places_1 = require("../../utils/validators/max-decimal-places");
 class CreateOrderItemDto {
 }
 exports.CreateOrderItemDto = CreateOrderItemDto;
@@ -21,12 +22,14 @@ __decorate([
 ], CreateOrderItemDto.prototype, "productId", void 0);
 __decorate([
     (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),
     __metadata("design:type", Number)
 ], CreateOrderItemDto.prototype, "quantity", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
+    (0, max_decimal_places_1.MaxDecimalPlaces)(2),
     __metadata("design:type", Number)
 ], CreateOrderItemDto.prototype, "unitPrice", void 0);
 __decorate([

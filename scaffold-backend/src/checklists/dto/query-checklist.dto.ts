@@ -1,23 +1,7 @@
-import { IsOptional, IsUUID, IsDateString, IsString } from 'class-validator';
-
-export class QueryChecklistDto {
-  @IsOptional()
-  @IsUUID()
+export class QueryChecklistsDto {
   orderId?: string;
-
-  @IsOptional()
-  @IsUUID()
   builderId?: string;
-
-  @IsOptional()
-  @IsDateString()
   from?: string;
-
-  @IsOptional()
-  @IsDateString()
   to?: string;
-
-  @IsOptional()
-  @IsString()
   search?: string;
 }

@@ -1,21 +1,25 @@
-import { IsUUID, IsOptional, IsDateString, IsArray, ArrayMinSize, IsObject } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsNotEmpty, IsDateString, IsArray } from 'class-validator';
 
 export class CreateChecklistDto {
   @IsOptional()
   @IsUUID()
-  orderId?: string;
+  orderId?: string | null;
 
   @IsOptional()
   @IsUUID()
-  submittedBy?: string;
+  submittedBy?: string | null;
 
-  @IsObject()
+  @IsNotEmpty()
   checklistData: any;
 
   @IsDateString()
-  dateOfCheck: string; // ISO date
+  dateOfCheck: string;
 
   @IsOptional()
   @IsArray()
-  attachments?: string[]; // file keys
+  @IsString({ each: true })
+  attachments?: string[];
+
+  @IsOptional()
+  preserved?: boolean;
 }

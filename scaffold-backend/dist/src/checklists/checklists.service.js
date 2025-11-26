@@ -16,8 +16,9 @@ exports.ChecklistsService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
-const safety_checklist_entity_1 = require("./safety_checklist.entity");
+const safety_checklist_entity_1 = require("../database/entities/safety-checklist.entity");
 const notification_service_1 = require("../notifications/notification.service");
+const order_entity_1 = require("../database/entities/order.entity");
 let ChecklistsService = class ChecklistsService {
     constructor(dataSource, repo, notificationsSvc) {
         this.dataSource = dataSource;
@@ -36,7 +37,7 @@ let ChecklistsService = class ChecklistsService {
             checklistData: dto.checklistData,
             dateOfCheck: date,
             attachments: dto.attachments ?? [],
-            preserved: true
+            preserved: true,
         });
         const savedRaw = await this.repo.save(entity);
         const saved = Array.isArray(savedRaw) ? savedRaw[0] : savedRaw;
@@ -54,7 +55,11 @@ let ChecklistsService = class ChecklistsService {
         return saved;
     }
     async findByOrder(orderId) {
-        return this.repo.find({ where: { orderId }, order: { createdAt: 'DESC' } });
+        const qb = this.repo.createQueryBuilder('c')
+            .leftJoinAndSelect(order_entity_1.Order, 'o', `CONVERT(o.id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = CONVERT(c.orderId USING utf8mb4) COLLATE utf8mb4_0900_ai_ci`)
+            .where('c.orderId = :orderId', { orderId })
+            .orderBy('c.createdAt', 'DESC');
+        return qb.getMany();
     }
     async get(id) {
         const ent = await this.repo.findOne({ where: { id } });
@@ -63,7 +68,8 @@ let ChecklistsService = class ChecklistsService {
         return ent;
     }
     async search(filters) {
-        const qb = this.repo.createQueryBuilder('c').leftJoinAndSelect('c.order', 'o');
+        const qb = this.repo.createQueryBuilder('c')
+            .leftJoinAndSelect(order_entity_1.Order, 'o', `CONVERT(o.id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = CONVERT(c.orderId USING utf8mb4) COLLATE utf8mb4_0900_ai_ci`);
         if (filters.orderId)
             qb.andWhere('c.orderId = :orderId', { orderId: filters.orderId });
         if (filters.from)
@@ -78,6 +84,31 @@ let ChecklistsService = class ChecklistsService {
         }
         qb.orderBy('c.createdAt', 'DESC');
         return qb.getMany();
+    }
+    async delete(id) {
+        const checklist = await this.repo.findOne({ where: { id } });
+        if (!checklist) {
+            throw new common_1.NotFoundException('Checklist not found');
+        }
+        if (Array.isArray(checklist.attachments) && checklist.attachments.length > 0) {
+            for (const file of checklist.attachments) {
+                try {
+                    if (process.env.AWS_ACCESS_KEY_ID) {
+                    }
+                    else {
+                        const fs = await Promise.resolve().then(() => require('fs'));
+                        const path = `./uploads/checklists/${file}`;
+                        if (fs.existsSync(path))
+                            fs.unlinkSync(path);
+                    }
+                }
+                catch (e) {
+                    console.warn('Failed to delete file:', file, e?.message ?? e);
+                }
+            }
+        }
+        await this.repo.remove(checklist);
+        return { success: true, message: 'Checklist deleted successfully' };
     }
 };
 exports.ChecklistsService = ChecklistsService;

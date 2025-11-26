@@ -1,4 +1,5 @@
-import { IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+// src/inventory/dto/mark-damaged.dto.ts
+import { IsUUID, IsOptional, IsString, IsNumber } from 'class-validator';
 
 export class MarkDamagedDto {
   @IsUUID()

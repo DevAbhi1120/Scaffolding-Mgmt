@@ -29,40 +29,74 @@ let OrdersService = class OrdersService {
         this.inventoryService = inventoryService;
     }
     async create(createDto, createdBy) {
-        const orderToCreate = this.orderRepo.create({
-            builderId: createDto.builderId ?? null,
-            startDate: createDto.startDate ? new Date(createDto.startDate) : undefined,
-            closeDate: createDto.closeDate ? new Date(createDto.closeDate) : undefined,
-            notes: createDto.notes ?? null,
-            items: createDto.items.map((it) => ({
-                productId: it.productId,
-                quantity: it.quantity,
-                unitPrice: it.unitPrice ?? null,
-                serialNumbers: it.serialNumbers ?? null,
-                description: it.description ?? null,
-            })),
+        return this.createOrderTransactional(createDto, createdBy);
+    }
+    async createOrderTransactional(dto, createdBy) {
+        if (!dto?.items?.length)
+            throw new common_1.BadRequestException('Order must have items');
+        return this.dataSource.transaction(async (manager) => {
+            const order = manager.create(order_entity_1.Order, {
+                builderId: dto.builderId ?? null,
+                status: order_entity_1.OrderStatus.CONFIRMED,
+                startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
+                closeDate: dto.closeDate ? new Date(dto.closeDate) : null,
+                notes: dto.notes ?? null,
+            });
+            const savedOrder = await manager.save(order);
+            const createdItems = [];
+            for (const it of dto.items) {
+                const productId = it.productId;
+                const quantity = Number(it.quantity);
+                if (!productId || quantity <= 0)
+                    throw new common_1.BadRequestException('Invalid order item productId/quantity');
+                let reserved;
+                if (typeof this.inventoryService.reserveAvailableItems === 'function') {
+                    try {
+                        reserved = await this.inventoryService.reserveAvailableItems(manager, productId, quantity);
+                    }
+                    catch (err) {
+                        reserved = await this.inventoryService.reserveAvailableItems(productId, quantity);
+                    }
+                }
+                else {
+                    throw new common_1.InternalServerErrorException('InventoryService.reserveAvailableItems not available');
+                }
+                if (!Array.isArray(reserved) || reserved.length < quantity) {
+                    throw new common_1.BadRequestException(`Insufficient inventory for product ${productId}. Required ${quantity}, available ${Array.isArray(reserved) ? reserved.length : 0}`);
+                }
+                const itemIds = reserved.map((r) => r.id);
+                const orderItem = manager.create(order_item_entity_1.OrderItem, {
+                    orderId: savedOrder.id,
+                    productId,
+                    quantity,
+                    unitPrice: typeof it.unitPrice !== 'undefined' ? it.unitPrice : null,
+                    description: it.description ?? null,
+                    serialNumbers: it.serialNumbers ?? null,
+                });
+                const savedItem = await manager.save(orderItem);
+                createdItems.push(savedItem);
+                if (typeof this.inventoryService.assignItemsToOrderWithManager === 'function') {
+                    await this.inventoryService.assignItemsToOrderWithManager(manager, itemIds, savedOrder.id, createdBy);
+                }
+                else if (typeof this.inventoryService.assignItemsToOrder === 'function') {
+                    await this.inventoryService.assignItemsToOrder(itemIds, savedOrder.id, createdBy);
+                }
+                else {
+                    throw new common_1.InternalServerErrorException('InventoryService assign method not available');
+                }
+            }
+            if (this.billingService.createInvoiceFromOrderWithManager) {
+                try {
+                    const invoice = await this.billingService.createInvoiceFromOrderWithManager(manager, savedOrder.id);
+                    savedOrder.invoiceId = invoice.id;
+                    await manager.save(savedOrder);
+                }
+                catch (err) {
+                    throw new common_1.BadRequestException(`Failed to create invoice: ${err?.message ?? err}`);
+                }
+            }
+            return manager.findOne(order_entity_1.Order, { where: { id: savedOrder.id }, relations: ['items'] });
         });
-        const savedRaw = await this.orderRepo.save(orderToCreate);
-        const saved = Array.isArray(savedRaw) ? savedRaw[0] : savedRaw;
-        if (!saved?.id)
-            throw new common_1.BadRequestException('Failed to create order');
-        const orderWithItems = await this.orderRepo.findOne({ where: { id: saved.id }, relations: ['items'] });
-        if (!orderWithItems)
-            throw new common_1.BadRequestException('Failed to load created order items');
-        for (const item of orderWithItems.items) {
-            try {
-                await this.inventoryService.assignToOrder({
-                    productId: item.productId,
-                    orderId: saved.id,
-                    serialNumbers: item.serialNumbers ?? undefined,
-                    quantity: item.quantity,
-                }, createdBy);
-            }
-            catch (err) {
-                throw new common_1.BadRequestException(`Failed to assign inventory for product ${item.productId}: ${err?.message ?? String(err)}`);
-            }
-        }
-        return this.orderRepo.findOne({ where: { id: saved.id }, relations: ['items'] });
     }
     async closeOrder(orderId, closedBy) {
         return this.dataSource.transaction(async (manager) => {
@@ -70,65 +104,16 @@ let OrdersService = class OrdersService {
             const order = await orderRepo.findOne({ where: { id: orderId }, relations: ['items'] });
             if (!order)
                 throw new common_1.NotFoundException('Order not found');
-            order.status = order_entity_1.OrderStatus.CLOSED;
+            order.status = order_entity_1.OrderStatus.SHIPPED;
             order.closeDate = new Date();
             await manager.save(order);
-            if (this.billingService.createInvoiceFromOrder) {
-                const invoice = await this.billingService.createInvoiceFromOrder(order.id);
+            if (this.billingService.createInvoiceFromOrderWithManager) {
+                const invoice = await this.billingService.createInvoiceFromOrderWithManager(manager, order.id);
                 order.invoiceId = invoice.id;
                 await manager.save(order);
                 return { order, invoice };
             }
             return { order };
-        });
-    }
-    async createOrderTransactional(dto) {
-        if (!dto?.items?.length)
-            throw new common_1.BadRequestException('Order must have items');
-        return this.dataSource.transaction(async (manager) => {
-            const order = manager.create(order_entity_1.Order, {
-                builderId: dto.builderId ?? null,
-                status: order_entity_1.OrderStatus.OPEN,
-                startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
-                closeDate: dto.closeDate ? new Date(dto.closeDate) : null,
-                notes: dto.notes ?? null,
-            });
-            const savedOrder = await manager.save(order);
-            const createdItems = [];
-            const allAssignedItemIds = [];
-            for (const it of dto.items) {
-                const productId = it.productId;
-                const quantity = Number(it.quantity);
-                if (!productId || quantity <= 0)
-                    throw new common_1.BadRequestException('Invalid order item productId/quantity');
-                const reserved = await this.inventoryService.reserveAvailableItems(manager, productId, quantity);
-                if (reserved.length < quantity) {
-                    throw new common_1.BadRequestException(`Insufficient inventory for product ${productId}. Required ${quantity}, available ${reserved.length}`);
-                }
-                const itemIds = reserved.map((r) => r.id);
-                allAssignedItemIds.push(...itemIds);
-                const orderItem = manager.create(order_item_entity_1.OrderItem, {
-                    orderId: savedOrder.id,
-                    productId,
-                    quantity,
-                    unitPrice: it.unitPrice ?? 0,
-                    description: it.description ?? null,
-                });
-                createdItems.push(await manager.save(orderItem));
-                await this.inventoryService.assignItemsToOrderWithManager(manager, itemIds, savedOrder.id);
-            }
-            return manager.findOne(order_entity_1.Order, { where: { id: savedOrder.id }, relations: ['items'] });
-        });
-    }
-    async closeOrderTransactional(orderId) {
-        return this.dataSource.transaction(async (manager) => {
-            const order = await manager.findOne(order_entity_1.Order, { where: { id: orderId }, relations: ['items'] });
-            if (!order)
-                throw new common_1.NotFoundException('Order not found');
-            order.status = order_entity_1.OrderStatus.CLOSED;
-            order.closeDate = new Date();
-            await manager.save(order);
-            return order;
         });
     }
     async findOne(id) {
@@ -138,7 +123,7 @@ let OrdersService = class OrdersService {
         const [items, total] = await this.orderRepo.findAndCount({
             skip: (page - 1) * limit,
             take: limit,
-            relations: ['items'],
+            relations: [],
             order: { createdAt: 'DESC' },
         });
         return { items, total, page, limit };

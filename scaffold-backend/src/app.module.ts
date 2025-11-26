@@ -9,7 +9,7 @@ import { ProductsModule } from './products/products.module';
 import { CategoriesModule } from './categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
 import { InventoryModule } from './inventory/inventory.module';
-import { FilesModule } from './files/files.module';
+import { FilesModule } from './checklists/files/files.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChecklistsModule } from './checklists/checklists.module';
 import { SwmsModule } from './swms/swms.module';

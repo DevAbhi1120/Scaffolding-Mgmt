@@ -23,9 +23,4 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], RecoverItemDto.prototype, "notes", void 0);
-__decorate([
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], RecoverItemDto.prototype, "orderId", void 0);
 //# sourceMappingURL=recover-item.dto.js.map

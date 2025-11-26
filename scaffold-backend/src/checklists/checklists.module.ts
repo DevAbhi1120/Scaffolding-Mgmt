@@ -1,14 +1,15 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { SafetyChecklist } from './safety_checklist.entity';
+import { SafetyChecklist } from '@src/database/entities/safety-checklist.entity';
 import { ChecklistsService } from './checklists.service';
 import { ChecklistsController } from './checklists.controller';
-import { NotificationsModule } from '../notifications/notifications.module';
+import { FilesModule } from './files/files.module';
+import { NotificationsModule } from '@src/notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([SafetyChecklist]), NotificationsModule],
-  providers: [ChecklistsService],
+  imports: [TypeOrmModule.forFeature([SafetyChecklist]), FilesModule,NotificationsModule],
   controllers: [ChecklistsController],
-  exports: [ChecklistsService]
+  providers: [ChecklistsService],
+  exports: [ChecklistsService],
 })
 export class ChecklistsModule {}

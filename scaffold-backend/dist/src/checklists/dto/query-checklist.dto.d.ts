@@ -1,4 +1,4 @@
-export declare class QueryChecklistDto {
+export declare class QueryChecklistsDto {
     orderId?: string;
     builderId?: string;
     from?: string;

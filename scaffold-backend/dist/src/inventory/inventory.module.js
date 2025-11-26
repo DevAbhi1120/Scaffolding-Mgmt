@@ -9,19 +9,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
-const inventory_item_entity_1 = require("../database/entities/inventory-item.entity");
-const inventory_movement_entity_1 = require("../database/entities/inventory-movement.entity");
 const inventory_service_1 = require("./inventory.service");
 const inventory_controller_1 = require("./inventory.controller");
-const loss_controller_1 = require("./loss.controller");
+const inventory_item_entity_1 = require("../database/entities/inventory-item.entity");
+const inventory_movement_entity_1 = require("../database/entities/inventory-movement.entity");
+const inventory_batch_entity_1 = require("../database/entities/inventory-batch.entity");
+const product_entity_1 = require("../database/entities/product.entity");
 let InventoryModule = class InventoryModule {
 };
 exports.InventoryModule = InventoryModule;
 exports.InventoryModule = InventoryModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([inventory_item_entity_1.InventoryItem, inventory_movement_entity_1.InventoryMovement])],
-        controllers: [inventory_controller_1.InventoryController, loss_controller_1.LossController],
+        imports: [typeorm_1.TypeOrmModule.forFeature([inventory_item_entity_1.InventoryItem, inventory_movement_entity_1.InventoryMovement, inventory_batch_entity_1.InventoryBatch, product_entity_1.Product])],
         providers: [inventory_service_1.InventoryService],
+        controllers: [inventory_controller_1.InventoryController],
         exports: [inventory_service_1.InventoryService],
     })
 ], InventoryModule);

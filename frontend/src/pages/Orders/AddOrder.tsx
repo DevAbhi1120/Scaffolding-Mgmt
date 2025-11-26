@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import Swal from "sweetalert2";
@@ -8,18 +8,34 @@ import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 
 import Label from "../../components/form/Label";
-import Select from "react-select";
+import Select, { OptionTypeBase } from "react-select";
 import Flatpickr from "react-flatpickr";
 import { BASE_URL } from "../../components/BaseUrl/config";
+
+type Product = {
+  id: string;
+  name: string;
+  stockQuantity?: number;
+  price?: string | number;
+  [k: string]: any;
+};
+
+type Builder = {
+  id: string;
+  businessName: string;
+  [k: string]: any;
+};
 
 export default function AddOrder() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [builders, setBuilders] = useState<Builder[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
+    builderId: "" as string,
     user_name: "",
     user_email: "",
     user_phonenumber: "",
@@ -31,73 +47,56 @@ export default function AddOrder() {
 
   const [orderItems, setOrderItems] = useState<
     {
-      product_id: number;
-      product_name: string;
-      stock_quantity: number;
-      price: string;
-      order_qty: number;
+      tempId: string;
+      productId: string | null;
+      productName?: string;
+      availablePhysical: number;
+      unitPrice: number;
+      quantity: number;
+      description?: string;
     }[]
   >([
     {
-      product_id: 0,
-      product_name: "",
-      stock_quantity: 0,
-      price: 0,
-      order_qty: 0,
+      tempId: String(Date.now()) + "-0",
+      productId: null,
+      productName: "",
+      availablePhysical: 0,
+      unitPrice: 0,
+      quantity: 0,
+      description: "",
     },
   ]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem("token");
-
-        const [productsRes, inventoriesRes] = await Promise.all([
-          axios.get(`${BASE_URL}products`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get(`${BASE_URL}inventories`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const [productsRes, buildersRes] = await Promise.all([
+          axios.get(`${BASE_URL}products`, { headers }),
+          axios.get(`${BASE_URL}builders`, { headers }),
         ]);
 
-        if (productsRes.data.success && inventoriesRes.data.success) {
-          const inventoriesMap: Record<string, number> = {};
-          inventoriesRes.data.data.forEach((inv: any) => {
-            inventoriesMap[inv.product_id] = inv.stock_in;
-            console.log(inv.stock_in, "inventoriesRes");
-          });
-
-          const options = productsRes.data.products.map((p: any) => ({
-            value: p.id,
-            label: p.name,
-            price: p.price,
-            // stock_quantity => inventory ka stock_in
-            stock_quantity: inventoriesMap[p.id] || 0,
-          }));
-
-          setProducts(options);
+        if (productsRes.status === 200) {
+          setProducts(productsRes.data.items ?? []);
+        }
+        if (buildersRes.status === 200) {
+          setBuilders(buildersRes.data.items ?? []);
         }
       } catch (err) {
         console.error("Error fetching data", err);
+        Swal.fire("Error", "Failed to load products or builders", "error");
       }
     };
 
     fetchData();
   }, [token]);
 
-  const handleProductChange = (selected, index) => {
-    const updatedItems = [...orderItems];
-
-    updatedItems[index] = {
-      ...updatedItems[index],
-      product_id: selected?.value || null,
-      stock_quantity: selected?.stock_quantity || 0,
-      price: selected?.price || 0,
-      order_qty: 0,
-    };
-    setOrderItems(updatedItems);
-  };
+  const clearError = (field: string) =>
+    setErrors((prev) => {
+      const c = { ...prev };
+      delete c[field];
+      return c;
+    });
 
   const handleChange = (
     e: React.ChangeEvent<
@@ -109,90 +108,207 @@ export default function AddOrder() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const clearError = (field: string) => {
-    setErrors((prev) => {
-      const newErrors = { ...prev };
-      delete newErrors[field];
-      return newErrors;
+  const fetchInventorySummary = async (productId: string) => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const res = await axios.get(
+        `${BASE_URL}inventories/summary/${productId}`,
+        { headers }
+      );
+      return res.data as {
+        productId: string;
+        availablePhysical: number;
+        stockBalance: number;
+      };
+    } catch (err) {
+      console.warn("Failed to fetch inventory summary", err);
+      return null;
+    }
+  };
+
+  const handleProductChange = async (option: any, index: number) => {
+    clearError("products");
+    const updated = [...orderItems];
+    if (!option) {
+      updated[index] = {
+        ...updated[index],
+        productId: null,
+        productName: "",
+        availablePhysical: 0,
+        unitPrice: 0,
+        quantity: 0,
+      };
+      setOrderItems(updated);
+      return;
+    }
+
+    // fetch inventory summary for accurate availablePhysical
+    const summary = await fetchInventorySummary(option.value);
+
+    updated[index] = {
+      ...updated[index],
+      productId: option.value,
+      productName: option.label,
+      availablePhysical: summary
+        ? summary.availablePhysical
+        : option.stockQuantity ?? 0,
+      unitPrice: Number(option.price ?? 0),
+      quantity: 0,
+    };
+
+    setOrderItems(updated);
+  };
+
+  const handleQtyChange = (index: number, qty: number) => {
+    setOrderItems((prev) => {
+      const copy = [...prev];
+      if (qty < 0) qty = 0;
+      if (qty > copy[index].availablePhysical) {
+        Swal.fire(
+          "Error",
+          "Order quantity cannot exceed available stock",
+          "error"
+        );
+        return prev;
+      }
+      copy[index] = { ...copy[index], quantity: qty };
+      return copy;
     });
+  };
+
+  const handleDescriptionChange = (index: number, value: string) => {
+    setOrderItems((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], description: value };
+      return copy;
+    });
+  };
+
+  const addMoreItem = () => {
+    setOrderItems((prev) => [
+      ...prev,
+      {
+        tempId: String(Date.now()) + "-" + prev.length,
+        productId: null,
+        productName: "",
+        availablePhysical: 0,
+        unitPrice: 0,
+        quantity: 0,
+        description: "",
+      },
+    ]);
+  };
+
+  const removeItem = (index: number) => {
+    setOrderItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.order_date) newErrors.order_date = "Order date is required.";
-    if (
-      orderItems.filter((i) => i.product_id && i.order_qty > 0).length === 0
-    ) {
-      newErrors.products = "At least one product is required.";
-    }
-
+    const validItems = orderItems.filter(
+      (it) => it.productId && it.quantity > 0
+    );
+    if (validItems.length === 0)
+      newErrors.products = "At least one product with quantity is required.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handle order qty
-  const handleOrderQtyChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    index: number
-  ) => {
-    const updatedItems = [...orderItems];
-    updatedItems[index].order_qty = parseInt(e.target.value, 10) || 0;
-    setOrderItems(updatedItems);
-  };
+  const orderTotal = orderItems.reduce(
+    (acc, r) => acc + (r.unitPrice ?? 0) * (r.quantity ?? 0),
+    0
+  );
 
-  // Add new product row
-  const addMoreItem = () => {
-    setOrderItems([
-      ...orderItems,
-      {
-        product_id: 0,
-        product_name: "",
-        stock_quantity: 0,
-        price: 0,
-        order_qty: 0,
-      },
-    ]);
-  };
-
-  // Remove product row
-  const removeItem = (index: number) => {
-    const updatedItems = orderItems.filter((_, i) => i !== index);
-    setOrderItems(updatedItems);
-  };
-
-  // Submit order
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-
     setLoading(true);
+
     try {
+      // Pre-check availability using inventory summary endpoints
+      const checks = orderItems
+        .filter((it) => it.productId && it.quantity > 0)
+        .map((it) => fetchInventorySummary(it.productId as string));
+
+      const results = await Promise.all(checks);
+
+      for (let i = 0; i < results.length; i++) {
+        const summary = results[i];
+        const requested = orderItems.filter(
+          (it) => it.productId && it.quantity > 0
+        )[i].quantity;
+        if (
+          !summary ||
+          (summary.availablePhysical < requested &&
+            summary.stockBalance < requested)
+        ) {
+          Swal.fire(
+            "Error",
+            `Insufficient stock for product ${
+              summary?.productId ?? "unknown"
+            }. Available: ${
+              summary
+                ? summary.availablePhysical ?? summary.stockBalance
+                : "unknown"
+            }`,
+            "error"
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Build payload (backend expects productId, quantity, unitPrice optional)
       const payload = {
-        ...formData,
+        builderId: formData.builderId || undefined,
+        startDate: formData.order_date || undefined,
+        notes: formData.notes || undefined,
         items: orderItems
-          .filter((item) => item.product_id && item.order_qty > 0)
-          .map((item) => ({
-            product_id: item.product_id,
-            qty: item.order_qty,
+          .filter((it) => it.productId && it.quantity > 0)
+          .map((it) => ({
+            productId: it.productId,
+            quantity: Number(it.quantity),
+            unitPrice: it.unitPrice || undefined,
+            description: it.description || undefined,
           })),
       };
 
-      await axios.post("http://localhost:5000/api/orders", payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.post(`${BASE_URL}orders`, payload, { headers });
 
-      Swal.fire("Success", "Order created successfully!", "success");
-      navigate("/order-list");
+      if (res.status === 200 || res.status === 201) {
+        Swal.fire("Success", "Order created successfully", "success");
+        navigate("/order-list");
+      } else {
+        Swal.fire(
+          "Error",
+          res.data?.message || "Failed to create order",
+          "error"
+        );
+      }
     } catch (err: any) {
+      console.error(err);
       Swal.fire(
         "Error",
-        err.response?.data?.message || "Failed to create order",
+        err?.response?.data?.message || "Failed to create order",
         "error"
       );
     } finally {
       setLoading(false);
     }
   };
+
+  const builderOptions = builders.map((b) => ({
+    label: b.businessName ?? b.contactEmail ?? b.id,
+    value: b.id,
+  }));
+  const productOptions = products.map((p) => ({
+    label: p.name,
+    value: p.id,
+    stockQuantity: Number(p.stockQuantity ?? 0),
+    price: p.price ?? 0,
+  }));
 
   return (
     <>
@@ -203,73 +319,87 @@ export default function AddOrder() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>User Name *</Label>
+              <Label>Builder (optional)</Label>
+              <Select
+                options={builderOptions}
+                onChange={(s) =>
+                  setFormData((p) => ({
+                    ...p,
+                    builderId: (s as any)?.value ?? "",
+                  }))
+                }
+                value={
+                  builderOptions.find((o) => o.value === formData.builderId) ??
+                  null
+                }
+                isClearable
+                placeholder="Select builder..."
+              />
+            </div>
+
+            <div>
+              <Label>Order Date *</Label>
+              <Flatpickr
+                value={
+                  formData.order_date ? new Date(formData.order_date) : null
+                }
+                options={{ dateFormat: "Y-m-d" }}
+                onChange={(dates) => {
+                  const d = dates?.[0];
+                  const iso = d ? d.toISOString().slice(0, 10) : "";
+                  setFormData((p) => ({ ...p, order_date: iso }));
+                }}
+                className="border rounded p-2 w-full"
+              />
+              {errors.order_date && (
+                <p className="text-red-600 text-sm">{errors.order_date}</p>
+              )}
+            </div>
+
+            <div>
+              <Label>User Name</Label>
               <input
                 type="text"
                 name="user_name"
                 value={formData.user_name}
                 onChange={handleChange}
-                className="border rounded p-2 w-full text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800"
-                required
+                className="border rounded p-2 w-full"
               />
             </div>
 
             <div>
-              <Label>User Email *</Label>
+              <Label>User Email</Label>
               <input
                 type="email"
                 name="user_email"
                 value={formData.user_email}
                 onChange={handleChange}
-                className="border rounded p-2 w-full text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800"
-                required
+                className="border rounded p-2 w-full"
               />
             </div>
 
             <div>
-              <Label>User Phone Number *</Label>
+              <Label>User Phone</Label>
               <input
                 type="text"
                 name="user_phonenumber"
                 value={formData.user_phonenumber}
                 onChange={handleChange}
-                className="border rounded p-2 w-full text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800"
-                required
+                className="border rounded p-2 w-full"
               />
             </div>
 
             <div>
-              <Label>User Address *</Label>
+              <Label>User Address</Label>
               <textarea
                 name="user_address"
                 value={formData.user_address}
                 onChange={handleChange}
-                className="border rounded p-2 w-full text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800"
-                required
+                className="border rounded p-2 w-full"
               />
             </div>
           </div>
 
-          {/* Order Date */}
-          <div>
-            <Label>Order Date *</Label>
-            <Flatpickr
-              value={formData.order_date}
-              options={{ dateFormat: "d-m-Y" }}
-              onChange={(selectedDates) => {
-                const date = selectedDates[0]
-                  ? selectedDates[0].toISOString().slice(0, 10)
-                  : "";
-                handleChange({ target: { name: "order_date", value: date } });
-              }}
-              className="border rounded p-2 w-full text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800"
-            />
-            {errors.order_date && (
-              <p className="text-red-600 text-sm">{errors.order_date}</p>
-            )}
-          </div>
-
-          {/* Notes */}
           <div>
             <Label>Notes</Label>
             <textarea
@@ -280,14 +410,13 @@ export default function AddOrder() {
             />
           </div>
 
-          {/* Status */}
           <div>
             <Label>Status</Label>
             <select
               name="status"
               value={formData.status}
               onChange={handleChange}
-              className="border rounded p-2 w-full text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800"
+              className="border rounded p-2 w-full"
             >
               <option value="DRAFT">Draft</option>
               <option value="CONFIRMED">Confirmed</option>
@@ -296,146 +425,136 @@ export default function AddOrder() {
             </select>
           </div>
 
-          {/* Products */}
           <div>
-            <Label>Add Products *</Label>
-            {orderItems.map((item, index) => (
-              <div key={index} className="border rounded-lg p-4 mb-3 shadow-sm">
+            <Label>Products *</Label>
+            {orderItems.map((row, idx) => (
+              <div
+                key={row.tempId}
+                className="border rounded-lg p-4 mb-3 shadow-sm"
+              >
                 <div className="grid grid-cols-12 gap-4">
-                  {/* Product Select */}
-
-                  {/* <div className="col-span-6">
-                    <Label>Products</Label>
-                    {(() => {
-                      const selectedProduct = products.find(
-                        (p) => p.value.toString() === item.product_id.toString()
-                      );
-                      return (
-                        <>
-                          <Select
-                            options={products}
-                            value={selectedProduct || null}
-                            onChange={(selected) => handleProductChange(selected, index)}
-                            placeholder="Select a product..."
-                          />
-                          {selectedProduct?.stock_quantity > 0 && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              Available stock: {selectedProduct.stock_quantity}
-                            </p>
-                          )}
-                          {selectedProduct?.price > 0 && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              Product Price: {selectedProduct.price}
-                            </p>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div> */}
-
                   <div className="col-span-6">
-                    <Label>Products</Label>
-                    {(() => {
-                      // already selected product IDs except current index
-                      const selectedIds = orderItems
-                        .filter((_, i) => i !== index)
-                        .map((item) => item.product_id);
-
-                      // available products for this row
-                      const availableProducts = products.filter(
-                        (p) => !selectedIds.includes(p.value)
-                      );
-
-                      const selectedProduct = products.find(
-                        (p) => p.value === item.product_id
-                      );
-
-                      return (
-                        <>
-                          <Select
-                            options={availableProducts}
-                            value={selectedProduct || null}
-                            onChange={(selected) =>
-                              handleProductChange(selected, index)
+                    <Label>Product</Label>
+                    <Select
+                      options={productOptions.map((o) => ({
+                        label: `${o.label} (${o.stockQuantity} reported)`,
+                        value: o.value,
+                        price: o.price,
+                      }))}
+                      value={
+                        row.productId
+                          ? {
+                              label: `${row.productName} (${row.availablePhysical})`,
+                              value: row.productId,
                             }
-                            placeholder="Select a product..."
-                          />
-                          {selectedProduct?.stock_quantity > 0 && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              Available stock: {selectedProduct.stock_quantity}
-                            </p>
-                          )}
-                          {selectedProduct?.price > 0 && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              Product Price: {selectedProduct.price}
-                            </p>
-                          )}
-                        </>
-                      );
-                    })()}
+                          : null
+                      }
+                      onChange={(opt) => handleProductChange(opt as any, idx)}
+                      isClearable
+                    />
+                    <p className="text-sm text-gray-600 mt-1">
+                      Available: {row.availablePhysical}
+                    </p>
                   </div>
-                  {/* Order Quantity */}
-                  <div className="col-span-6">
-                    <Label>Order Quantity *</Label>
+
+                  <div className="col-span-3">
+                    <Label>Quantity *</Label>
                     <input
                       type="number"
-                      min="1"
-                      value={item.order_qty || ""}
-                      onChange={(e) => {
-                        const qty = Number(e.target.value);
+                      min={0}
+                      value={row.quantity || ""}
+                      onChange={(e) =>
+                        handleQtyChange(idx, Number(e.target.value || 0))
+                      }
+                      className="border rounded p-2 w-full"
+                    />
+                  </div>
 
-                        if (qty > item.stock_quantity + (item.order_qty || 0)) {
-                          Swal.fire(
-                            "Error",
-                            "Order quantity cannot exceed stock",
-                            "error"
-                          );
-                        } else {
-                          const updatedItems = [...orderItems];
+                  <div className="col-span-3">
+                    <Label>Line Total</Label>
+                    <div className="p-2 border rounded h-full flex items-center">
+                      <strong>
+                        {((row.unitPrice || 0) * (row.quantity || 0)).toFixed(
+                          2
+                        )}
+                      </strong>
+                    </div>
+                  </div>
 
-                          // pehle purana qty wapas add karo
-                          const restoredStock =
-                            (updatedItems[index].stock_quantity || 0) +
-                            (updatedItems[index].order_qty || 0);
-
-                          // fir naya qty minus karo
-                          updatedItems[index].order_qty = qty;
-                          updatedItems[index].stock_quantity =
-                            restoredStock - qty;
-
-                          setOrderItems(updatedItems);
-                        }
-                      }}
-                      className="border rounded p-2 w-full text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800"
+                  <div className="col-span-12 mt-2">
+                    <Label>Item Notes (optional)</Label>
+                    <input
+                      type="text"
+                      value={row.description || ""}
+                      onChange={(e) =>
+                        handleDescriptionChange(idx, e.target.value)
+                      }
+                      className="border rounded p-2 w-full"
                     />
                   </div>
                 </div>
 
-                {orderItems.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeItem(index)}
-                    className="mt-3 text-red-600 hover:underline"
-                  >
-                    Remove
-                  </button>
-                )}
+                <div className="flex justify-between items-center mt-3">
+                  <div />
+                  <div>
+                    {orderItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(idx)}
+                        className="text-red-600 hover:underline mr-3"
+                      >
+                        Remove
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderItems((prev) => {
+                          const copy = [...prev];
+                          copy.splice(idx + 1, 0, {
+                            tempId:
+                              String(Date.now()) +
+                              "-" +
+                              Math.random().toString(36).slice(2, 8),
+                            productId: null,
+                            productName: "",
+                            availablePhysical: 0,
+                            unitPrice: 0,
+                            quantity: 0,
+                            description: "",
+                          });
+                          return copy;
+                        });
+                      }}
+                      className="px-3 py-1 bg-gray-200 rounded"
+                    >
+                      + Insert Row
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
 
-            <button
-              type="button"
-              onClick={addMoreItem}
-              className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              + Add More
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={addMoreItem}
+                className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                + Add More
+              </button>
+
+              <div className="ml-auto p-2">
+                <div className="text-sm">Order Total</div>
+                <div className="text-lg font-bold">{orderTotal.toFixed(2)}</div>
+              </div>
+            </div>
+
             {errors.products && (
-              <p className="text-red-600 text-sm">{errors.products}</p>
+              <p className="text-red-600 text-sm mt-2">{errors.products}</p>
             )}
           </div>
 
-          {/* Submit */}
           <div className="flex justify-center">
             <button
               type="submit"

@@ -5,10 +5,10 @@ export declare class OrderItem {
     orderId: string;
     order: Order;
     productId: string;
-    product: Product;
+    product?: Product;
     quantity: number;
-    serialNumbers?: string[];
-    unitPrice?: number;
-    description?: string;
+    serialNumbers?: string[] | null;
+    unitPrice?: number | null;
+    description?: string | null;
     createdAt: Date;
 }

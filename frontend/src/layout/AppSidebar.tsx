@@ -16,6 +16,15 @@ import {
   UserCircleIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
+import {
+  Bolt,
+  Box,
+  Landmark,
+  Leaf,
+  List,
+  ShieldCheck,
+  Sprout,
+} from "lucide-react";
 
 type NavItem = {
   name: string;
@@ -39,38 +48,18 @@ const navItems: NavItem[] = [
       { name: "Add User", path: "/add-user", pro: false },
     ],
   },
+  {
+    name: "Builders",
+    icon: <Landmark />,
+    subItems: [
+      { name: "All Builders", path: "/builders", pro: false },
+      { name: "Add Builder", path: "/add-builder", pro: false },
+    ],
+  },
 
   {
     name: "Category",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        className="lucide lucide-cog-icon lucide-cog"
-      >
-        <path d="M11 10.27 7 3.34" />
-        <path d="m11 13.73-4 6.93" />
-        <path d="M12 22v-2" />
-        <path d="M12 2v2" />
-        <path d="M14 12h8" />
-        <path d="m17 20.66-1-1.73" />
-        <path d="m17 3.34-1 1.73" />
-        <path d="M2 12h2" />
-        <path d="m20.66 17-1.73-1" />
-        <path d="m20.66 7-1.73 1" />
-        <path d="m3.34 17 1.73-1" />
-        <path d="m3.34 7 1.73 1" />
-        <circle cx="12" cy="12" r="2" />
-        <circle cx="12" cy="12" r="8" />
-      </svg>
-    ),
+    icon: <Bolt />,
     subItems: [
       { name: "New Category", path: "/add-category", pro: false },
       { name: "All Category", path: "/category-list", pro: false },
@@ -78,23 +67,7 @@ const navItems: NavItem[] = [
   },
   {
     name: "Product Type",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        className="lucide lucide-leaf-icon lucide-leaf"
-      >
-        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
-        <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
-      </svg>
-    ),
+    icon: <Leaf />,
     subItems: [
       { name: "New Product Type", path: "/add-product-type", pro: false },
       { name: "All Product Type", path: "/product-type-list", pro: false },
@@ -103,26 +76,7 @@ const navItems: NavItem[] = [
 
   {
     name: "Products",
-    icon: (
-      <>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          className="lucide lucide-sprout-icon lucide-sprout"
-        >
-          <path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3" />
-          <path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4" />
-          <path d="M5 21h14" />
-        </svg>
-      </>
-    ),
+    icon: <Sprout />,
     subItems: [
       { name: "Add Product", path: "/add-product", pro: false },
       { name: "All Product", path: "/product-list", pro: false },
@@ -131,24 +85,7 @@ const navItems: NavItem[] = [
 
   {
     name: "Inventory",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        className="lucide lucide-box-icon lucide-box"
-      >
-        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-        <path d="m3.3 7 8.7 5 8.7-5" />
-        <path d="M12 22V12" />
-      </svg>
-    ),
+    icon: <Box />,
     subItems: [
       { name: "New Inventory", path: "/add-inventory", pro: false },
       { name: "All Inventory", path: "/inventory-list", pro: false },
@@ -157,27 +94,7 @@ const navItems: NavItem[] = [
 
   {
     name: "Order",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        className="lucide lucide-list-ordered-icon lucide-list-ordered"
-      >
-        <path d="M11 5h10" />
-        <path d="M11 12h10" />
-        <path d="M11 19h10" />
-        <path d="M4 4h1v5" />
-        <path d="M4 9h2" />
-        <path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" />
-      </svg>
-    ),
+    icon: <List />,
     subItems: [
       { name: "New Order", path: "/add-order", pro: false },
       { name: "All Order", path: "/order-list", pro: false },
@@ -186,23 +103,7 @@ const navItems: NavItem[] = [
 
   {
     name: "Safety Checklist",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        className="lucide lucide-shield-check-icon lucide-shield-check"
-      >
-        <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-        <path d="m9 12 2 2 4-4" />
-      </svg>
-    ),
+    icon: <ShieldCheck />,
     subItems: [
       {
         name: "New Safety Checklist",
@@ -223,24 +124,24 @@ const navItems: NavItem[] = [
     name: "User Profile",
     path: "/profile",
   },
-  {
-    name: "Forms",
-    icon: <ListIcon />,
-    subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
-  },
-  {
-    name: "Tables",
-    icon: <TableIcon />,
-    subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
-  },
-  {
-    name: "Pages",
-    icon: <PageIcon />,
-    subItems: [
-      { name: "Blank Page", path: "/blank", pro: false },
-      { name: "404 Error", path: "/error-404", pro: false },
-    ],
-  },
+  // {
+  //   name: "Forms",
+  //   icon: <ListIcon />,
+  //   subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
+  // },
+  // {
+  //   name: "Tables",
+  //   icon: <TableIcon />,
+  //   subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
+  // },
+  // {
+  //   name: "Pages",
+  //   icon: <PageIcon />,
+  //   subItems: [
+  //     { name: "Blank Page", path: "/blank", pro: false },
+  //     { name: "404 Error", path: "/error-404", pro: false },
+  //   ],
+  // },
 ];
 
 const othersItems: NavItem[] = [

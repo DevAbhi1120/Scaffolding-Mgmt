@@ -41,6 +41,9 @@ import ViewOrder from "./pages/Orders/ViewOrder";
 import AddSafetyChecklist from "./pages/Checklist/AddSafetyChecklist";
 import SafetyChecklistList from "./pages/Checklist/SafetyChecklistList";
 import EditSafetyChecklist from "./pages/Checklist/EditSafetyChecklist";
+import EditBuilders from "./pages/Builders/EditBuilders";
+import BuildersList from "./pages/Builders/BuildersList";
+import AddBuilders from "./pages/Builders/AddBuilders";
 
 
 export default function App() {
@@ -56,6 +59,10 @@ export default function App() {
             <Route index path="/users" element={<UserList />} />
             <Route index path="/add-user" element={<AddUser />} />
             <Route path="/edit-user/:id" element={<EditProfile />} />
+
+            <Route path="/add-builder" element={<AddBuilders />} />
+            <Route path="/builders" element={<BuildersList />} />
+            <Route path="/edit-builder/:id" element={<EditBuilders />} />
 
             <Route path="/add-category" element={<AddCategory />} />
             <Route path="/category-list" element={<CategoryList />} />
@@ -80,7 +87,7 @@ export default function App() {
 
             <Route path="/add-safety-checklists" element={<AddSafetyChecklist />} />
             <Route path="/safety-checklists" element={<SafetyChecklistList />} />
-            <Route path="/edit-safety-checklists/:id" element={<EditSafetyChecklist />} />
+            <Route path="/edit-safety-checklist/:id" element={<EditSafetyChecklist />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />

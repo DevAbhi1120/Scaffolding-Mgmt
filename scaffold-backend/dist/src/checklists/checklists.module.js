@@ -9,19 +9,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChecklistsModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
-const safety_checklist_entity_1 = require("./safety_checklist.entity");
+const safety_checklist_entity_1 = require("../database/entities/safety-checklist.entity");
 const checklists_service_1 = require("./checklists.service");
 const checklists_controller_1 = require("./checklists.controller");
+const files_module_1 = require("./files/files.module");
 const notifications_module_1 = require("../notifications/notifications.module");
 let ChecklistsModule = class ChecklistsModule {
 };
 exports.ChecklistsModule = ChecklistsModule;
 exports.ChecklistsModule = ChecklistsModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([safety_checklist_entity_1.SafetyChecklist]), notifications_module_1.NotificationsModule],
-        providers: [checklists_service_1.ChecklistsService],
+        imports: [typeorm_1.TypeOrmModule.forFeature([safety_checklist_entity_1.SafetyChecklist]), files_module_1.FilesModule, notifications_module_1.NotificationsModule],
         controllers: [checklists_controller_1.ChecklistsController],
-        exports: [checklists_service_1.ChecklistsService]
+        providers: [checklists_service_1.ChecklistsService],
+        exports: [checklists_service_1.ChecklistsService],
     })
 ], ChecklistsModule);
 //# sourceMappingURL=checklists.module.js.map
