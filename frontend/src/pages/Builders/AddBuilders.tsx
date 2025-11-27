@@ -145,7 +145,7 @@ export default function AddBuilder() {
                 clearError("contactPhone");
                 setContactPhone(e.target.value);
               }}
-              placeholder="+61400..."
+              placeholder="+61XXXXXXXXX"
             />
             {errors.contactPhone && (
               <p className="text-red-600 text-sm mt-1">{errors.contactPhone}</p>

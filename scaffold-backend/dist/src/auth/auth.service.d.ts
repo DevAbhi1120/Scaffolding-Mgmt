@@ -9,5 +9,5 @@ export declare class AuthService {
         access_token: string;
         user: any;
     }>;
-    register(data: any): Promise<import("../database/entities/user.entity").User>;
+    register(data: any): Promise<any>;
 }

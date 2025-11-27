@@ -1,7 +1,7 @@
 import PageMeta from "../components/common/PageMeta";
 import AuthLayout from "./AuthPages/AuthPageLayout";
 import { useState, useContext, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom"; // ✅ fix import
+import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../icons";
 import Label from "../components/form/Label";
 import Input from "../components/form/input/InputField";
@@ -43,7 +43,14 @@ export default function LoginIn() {
     try {
       const res = await axios.post(`${BASE_URL}auth/login`, formData);
 
-      login(res.data.access_token);
+      const { access_token, user } = res.data;
+
+      if (!access_token || !user) {
+        throw new Error("Invalid login response");
+      }
+
+      // Store token + user
+      login(access_token, user);
 
       navigate("/");
     } catch (err: any) {

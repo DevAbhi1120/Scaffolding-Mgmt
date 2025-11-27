@@ -2,10 +2,7 @@ import { AuthService } from './auth.service';
 export declare class AuthController {
     private authService;
     constructor(authService: AuthService);
-    login(body: {
-        email: string;
-        password: string;
-    }): Promise<{
+    login(req: any): Promise<{
         access_token: string;
         user: any;
     }>;
@@ -14,5 +11,5 @@ export declare class AuthController {
         email: string;
         password: string;
         role?: string;
-    }): Promise<import("../database/entities/user.entity").User>;
+    }): Promise<any>;
 }

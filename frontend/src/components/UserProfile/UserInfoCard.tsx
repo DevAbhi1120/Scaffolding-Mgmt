@@ -5,77 +5,41 @@ import Button from "../ui/button/Button";
 import Input from "../form/input/InputField";
 import Label from "../form/Label";
 import Select from "../form/Select.tsx";
+import { BASE_URL } from "../BaseUrl/config";
+import { Pencil } from "lucide-react";
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: string;
-  profile_image: string;
-  status: string;
+interface Props {
+  user: any;
+  onUpdated?: () => void;
 }
 
-interface UserMetaCardProps {
-  user: User;
-}
+export default function UserInfoCard({ user, onUpdated }: Props) {
+  const { isOpen, openModal, closeModal } = useModal();
+  const [formData, setFormData] = useState<any>({});
 
-const defaultUser: User = {
-  id: "",
-  name: "",
-  email: "",
-  phone: "",
-  role: "",
-  profile_image: "",
-  status: "",
-};
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        id: user.id,
+        name: user.name ?? "",
+        email: user.email ?? "",
+        phone: user.phone ?? "",
+        role: user.role ?? "",
+      });
+    }
+  }, [user]);
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((p: any) => ({ ...p, [name]: value }));
+  };
 
-interface RoleLabels {
-  [key: string]: string;
-}
-
-const roleLabels: RoleLabels = {
-  super_admin: "Super Admin",
-  admin: "Admin",
-  user: "Team Member",
-};
-
-
-
-
-export default function UserInfoCard({user}: UserMetaCardProps) {
-   const { isOpen, openModal, closeModal } = useModal();
-    const [formData, setFormData] = useState<User>(defaultUser);
-  
-    useEffect(() => {
-      if (user) {
-        setFormData({
-          id: user.id || "",
-          name: user.name || "",
-          email: user.email || "",
-          phone: user.phone || "",
-          role: user.role || "",
-          profile_image: user.profile_image || "",
-          status: user.status || "",
-        });
-      }
-    }, [user]);
-  
-  
-  
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const { name, value } = e.target;
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    };
-  
-    const handleSave = async (e: React.FormEvent<HTMLFormElement>)  => {
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem("token"); // or use a proper auth context
-
-      const response = await fetch(`http://localhost:5000/api/users/${formData.id}`, {
-        method: "PUT",
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${BASE_URL}users/${formData.id}`, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -85,22 +49,15 @@ export default function UserInfoCard({user}: UserMetaCardProps) {
           email: formData.email,
           phone: formData.phone,
           role: formData.role,
-          status: formData.status, // optional, depending on your backend
-          // profile_image: skip for now
         }),
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to update user.");
-      }
-
-      const data = await response.json();
-      console.log("User updated:", data);
-
+      if (!res.ok) throw new Error("Failed to update user");
+      const result = await res.json();
+      console.log("User updated:", result);
+      if (onUpdated) onUpdated();
       closeModal();
-    } catch (error) {
-      console.error("Update failed:", error);
-      // You can show toast or alert here
+    } catch (err) {
+      console.error("Update failed:", err);
     }
   };
 
@@ -109,25 +66,15 @@ export default function UserInfoCard({user}: UserMetaCardProps) {
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90 lg:mb-6">
-             Personal Information
+            Personal Information
           </h4>
-
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-7 2xl:gap-x-32">
             <div>
               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                First Name
+                Full Name
               </p>
               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
                 {formData.name}
-              </p>
-            </div>
-
-            <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                Last Name
-              </p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                Not Added
               </p>
             </div>
 
@@ -154,32 +101,14 @@ export default function UserInfoCard({user}: UserMetaCardProps) {
                 Role
               </p>
               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {roleLabels[user.role] || user.role}
+                {formData.role}
               </p>
             </div>
           </div>
         </div>
 
-        <button
-          onClick={openModal}
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200 lg:inline-flex lg:w-auto"
-        >
-          <svg
-            className="fill-current"
-            width="18"
-            height="18"
-            viewBox="0 0 18 18"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              fillRule="evenodd"
-              clipRule="evenodd"
-              d="M15.0911 2.78206C14.2125 1.90338 12.7878 1.90338 11.9092 2.78206L4.57524 10.116C4.26682 10.4244 4.0547 10.8158 3.96468 11.2426L3.31231 14.3352C3.25997 14.5833 3.33653 14.841 3.51583 15.0203C3.69512 15.1996 3.95286 15.2761 4.20096 15.2238L7.29355 14.5714C7.72031 14.4814 8.11172 14.2693 8.42013 13.9609L15.7541 6.62695C16.6327 5.74827 16.6327 4.32365 15.7541 3.44497L15.0911 2.78206ZM12.9698 3.84272C13.2627 3.54982 13.7376 3.54982 14.0305 3.84272L14.6934 4.50563C14.9863 4.79852 14.9863 5.2734 14.6934 5.56629L14.044 6.21573L12.3204 4.49215L12.9698 3.84272ZM11.2597 5.55281L5.6359 11.1766C5.53309 11.2794 5.46238 11.4099 5.43238 11.5522L5.01758 13.5185L6.98394 13.1037C7.1262 13.0737 7.25666 13.003 7.35947 12.9002L12.9833 7.27639L11.2597 5.55281Z"
-              fill=""
-            />
-          </svg>
-          Edit
+        <button onClick={openModal} className="...">
+          <Pencil />
         </button>
       </div>
 
@@ -193,81 +122,56 @@ export default function UserInfoCard({user}: UserMetaCardProps) {
               Update your details to keep your profile up-to-date.
             </p>
           </div>
-        <form className="flex flex-col" onSubmit={handleSave}>
-            <div className="custom-scrollbar h-[450px] overflow-y-auto px-2 pb-3">
-              
-              <div className="mt-7">
-                <h5 className="mb-5 text-lg font-medium text-gray-800 dark:text-white/90 lg:mb-6">
-                  Personal Information
-                </h5>
 
+          <form className="flex flex-col" onSubmit={handleSave}>
+            <div className="custom-scrollbar  overflow-y-auto px-2 pb-3">
+              <div className="mt-7">
                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
-                  <div className="col-span-2 lg:col-span-1">
-                    <Label>First Name</Label>
-                      <Input
+                  <div>
+                    <Label>Full Name</Label>
+                    <Input
                       type="text"
                       name="name"
                       value={formData.name}
                       onChange={handleChange}
                     />
                   </div>
-
-                  <div className="col-span-2 lg:col-span-1">
-                    <Label>Last Name</Label>
-                    <Input type="text" value="Not Added" readOnly/>
+                  <div>
+                    <Label>Role</Label>
+                    <Input
+                      type="text"
+                      name="role"
+                      value={formData.role}
+                      onChange={handleChange}
+                    />
                   </div>
 
-                  <div className="col-span-2 lg:col-span-1">
+                  <div>
                     <Label>Email Address</Label>
-                     <Input
+                    <Input
                       type="email"
                       name="email"
+                      disabled
                       value={formData.email}
                       onChange={handleChange}
                     />
                   </div>
 
-                  <div className="col-span-2 lg:col-span-1">
+                  <div>
                     <Label>Phone</Label>
-                      <Input
+                    <Input
                       type="text"
                       name="phone"
-                      value={formData.phone}
+                      disabled={user?.phone ? true : false}
+                      value={formData.phone || ""}
                       onChange={handleChange}
                     />
                   </div>
-
-                   <div className="col-span-2 lg:col-span-1">
-                  <Label>Role</Label>
-
-                  {formData.role === "super_admin"  ? (
-                    <Input
-                      type="text"
-                      name="role"
-                      value={roleLabels[formData.role]}
-                      readOnly
-                      className="cursor-not-allowed bg-gray-100 dark:bg-gray-800"
-                    />
-                  ) : (
-                    <Select
-                      options={Object.entries(roleLabels)
-                        .filter(([key]) => key !== "super_admin") // 👈 remove super_admin
-                        .map(([key, label]) => ({
-                          value: key,
-                          label: label,
-                        }))}
-                      defaultValue={formData.role}
-                      onChange={(value) =>
-                        setFormData((prev) => ({ ...prev, role: value }))
-                      }
-                      className="w-full rounded-lg border border-gray-300 bg-white p-2 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-                    />
-                  )}
-                </div>
                 </div>
               </div>
             </div>
-          <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
+
+            <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
               <Button size="sm" variant="outline" onClick={closeModal}>
                 Close
               </Button>

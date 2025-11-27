@@ -19,6 +19,7 @@ import { useSidebar } from "../context/SidebarContext";
 import {
   Bolt,
   Box,
+  FileText,
   Landmark,
   Leaf,
   List,
@@ -111,6 +112,19 @@ const navItems: NavItem[] = [
         pro: false,
       },
       { name: "All Safety Checklist", path: "/safety-checklists", pro: false },
+    ],
+  },
+  
+  {
+    name: "SWMS",
+    icon: <FileText  />,
+    subItems: [
+      {
+        name: "New SWMS",
+        path: "/add-Swms",
+        pro: false,
+      },
+      { name: "All SWMS", path: "/Swms", pro: false },
     ],
   },
 

@@ -88,7 +88,7 @@ export default function EditBuilder() {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       Swal.fire("Updated", "Builder updated", "success");
-      navigate("/builder-list");
+      navigate("/builders");
     } catch (err) {
       console.error(err);
       Swal.fire("Error", "Failed to update builder", "error");
@@ -148,6 +148,7 @@ export default function EditBuilder() {
             <Label>Contact Phone</Label>
             <Input
               value={contactPhone}
+              placeholder="+61XXXXXXXXXX"
               onChange={(e) => setContactPhone(e.target.value)}
             />
           </div>
@@ -176,7 +177,7 @@ export default function EditBuilder() {
             </button>
             <button
               type="button"
-              onClick={() => navigate("/builder-list")}
+              onClick={() => navigate("/builders")}
               className="px-4 py-2 border rounded"
             >
               Cancel

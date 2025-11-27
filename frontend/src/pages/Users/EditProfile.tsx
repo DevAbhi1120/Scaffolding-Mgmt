@@ -1,4 +1,3 @@
-// src/pages/users/EditProfiles.tsx
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useParams } from "react-router-dom";
@@ -25,7 +24,9 @@ export default function EditProfiles() {
       const res = await axios.get(`${BASE_URL}users/${userId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setUser(res.data.user);
+      // backend returns { user } (controller) — but service sanitized response may be direct
+      const u = res.data.user ?? res.data;
+      setUser(u);
     } catch (error) {
       console.error("Failed to fetch user:", error);
     } finally {
@@ -50,6 +51,9 @@ export default function EditProfiles() {
     );
   if (!user) return <div className="p-5 text-red-500">User not found.</div>;
 
+  // handler to refresh user after update
+  const refresh = () => fetchUser(effectiveId);
+
   return (
     <>
       <PageMeta
@@ -62,9 +66,9 @@ export default function EditProfiles() {
           Profile
         </h3>
         <div className="space-y-6">
-          <UserMetaCard user={user} />
-          <UserInfoCard user={user} />
-          <UserAddressCard user={user} />
+          <UserMetaCard user={user} onUpdated={refresh} />
+          <UserInfoCard user={user} onUpdated={refresh} />
+          <UserAddressCard user={user} onUpdated={refresh} />
         </div>
       </div>
     </>

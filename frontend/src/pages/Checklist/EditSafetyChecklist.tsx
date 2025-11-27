@@ -8,7 +8,7 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
 import FileInput from "../../components/form/input/FileInput";
-import { BASE_URL } from "../../components/BaseUrl/config";
+import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
 import Swal from "sweetalert2";
 import { DownloadIcon, TrashBinIcon } from "../../icons";
 
@@ -35,29 +35,28 @@ export default function EditSafetyChecklist() {
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<string[]>([]);
 
-  // helper build file URL
   const buildFileUrl = (key: string) => {
+    console.log(key);
     if (!key) return "";
-    if (key.startsWith("http://") || key.startsWith("https://")) return key;
-    if (key.startsWith("/")) return `${window.location.origin}${key}`;
-    return `${BASE_URL}files/download/${encodeURIComponent(key)}`;
+    if (key.startsWith("http")) return key;
+    if (key.startsWith("/uploads/")) return `${window.location.origin}${key}`;
+    return `${BASE_URL.replace(/\/$/, "")}/files/download/${encodeURIComponent(
+      key
+    )}`;
   };
 
   useEffect(() => {
-    // fetch orders for dropdown (optional)
     const fetchOrders = async () => {
       try {
         const token = localStorage.getItem("token");
         const res = await axios.get(`${BASE_URL}orders`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
-        const list = res.data.items ?? res.data ?? [];
-        setOrders(list);
+        setOrders(res.data.items ?? res.data ?? []);
       } catch (err) {
         console.error("Failed to load orders", err);
       }
     };
-
     fetchOrders();
   }, []);
 
@@ -77,12 +76,14 @@ export default function EditSafetyChecklist() {
         setItems(
           Array.isArray(data.checklistData?.items)
             ? data.checklistData.items
-            : data.checklistData?.items ?? []
+            : []
         );
         setExistingAttachments(data.attachments ?? []);
-      } catch (err) {
-        console.error(err);
-        setMessage("Failed to load checklist");
+      } catch (err: any) {
+        setMessage(
+          "Failed to load checklist: " +
+            (err.response?.data?.message || err.message)
+        );
         setMessageType("error");
       } finally {
         setLoading(false);
@@ -91,59 +92,47 @@ export default function EditSafetyChecklist() {
     load();
   }, [id]);
 
-  const clearError = () => {
-    setMessage("");
-    setMessageType("");
-  };
-
-  // add new files
   const handleNewFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files;
-    if (!f) return;
-    setNewFiles((prev) => [...prev, ...Array.from(f)]);
+    if (e.target.files) {
+      setNewFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+    }
   };
 
-  // remove existing attachment (client-side only) — we will pass a preserved list to server
   const removeExistingAttachment = (key: string) => {
     setExistingAttachments((prev) => prev.filter((p) => p !== key));
   };
 
-  // remove new file before upload
   const removeNewFile = (i: number) => {
     setNewFiles((prev) => prev.filter((_, idx) => idx !== i));
   };
 
   const validate = () => {
-    const errors: string[] = [];
-    if (!orderId) errors.push("Order is required");
-    if (!dateOfCheck) errors.push("Date is required");
-    if (errors.length) {
-      setMessage(errors.join(", "));
-      setMessageType("error");
-      return false;
-    }
-    return true;
+    if (!orderId) return "Order is required";
+    if (!dateOfCheck) return "Date is required";
+    return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError();
-    if (!validate()) return;
-    setLoading(true);
+    const error = validate();
+    if (error) {
+      setMessage(error);
+      setMessageType("error");
+      return;
+    }
 
+    setLoading(true);
+    setMessage("");
     try {
       const token = localStorage.getItem("token");
       const form = new FormData();
 
-      // server accepts checklistData JSON; we store type/items inside it
       const checklistData = { type: checklistType, items };
       form.append("checklistData", JSON.stringify(checklistData));
       form.append("dateOfCheck", dateOfCheck);
       form.append("orderId", orderId);
-      // Preserve existing attachments by sending them back in body (so server can keep them)
       form.append("existingAttachments", JSON.stringify(existingAttachments));
 
-      // append new files (attachments[])
       newFiles.forEach((f) => form.append("attachments", f));
 
       await axios.put(`${BASE_URL}checklists/${id}`, form, {
@@ -153,12 +142,13 @@ export default function EditSafetyChecklist() {
         },
       });
 
-      setMessage("Checklist updated");
+      setMessage("Checklist updated successfully!");
       setMessageType("success");
-      setTimeout(() => navigate("/safety-checklists"), 1200);
-    } catch (err) {
-      console.error(err);
-      setMessage("Failed to update checklist");
+      setTimeout(() => navigate("/safety-checklists"), 1500);
+    } catch (err: any) {
+      setMessage(
+        "Update failed: " + (err.response?.data?.message || err.message)
+      );
       setMessageType("error");
     } finally {
       setLoading(false);
@@ -172,39 +162,39 @@ export default function EditSafetyChecklist() {
   };
 
   const removeAttachmentConfirm = async (key: string) => {
-    const r = await Swal.fire({
+    const result = await Swal.fire({
       title: "Remove attachment?",
-      text: "This will remove the attachment from this checklist (it won't delete the file).",
+      text: "This will remove it permanently from the checklist.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Remove",
+      confirmButtonText: "Yes, remove",
+      cancelButtonText: "Cancel",
     });
-    if (!r.isConfirmed) return;
-    removeExistingAttachment(key);
+    if (result.isConfirmed) {
+      removeExistingAttachment(key);
+    }
   };
 
   return (
     <>
       <PageBreadcrumb pageTitle="Edit Safety Checklist" />
-      <ComponentCard title="Update Checklist">
+      <ComponentCard title="Update Safety Checklist">
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-4">
             <div>
               <Label>Order</Label>
               <select
                 value={orderId}
                 onChange={(e) => setOrderId(e.target.value)}
                 className="w-full border rounded p-2"
+                required
               >
-                <option value="">-- Select order --</option>
+                <option value="">-- Select Order --</option>
                 {orders.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.id}
                   </option>
                 ))}
-                {orderId && !orders.find((o) => o.id === orderId) && (
-                  <option value={orderId}>{orderId}</option>
-                )}
               </select>
             </div>
 
@@ -212,31 +202,25 @@ export default function EditSafetyChecklist() {
               <Label>Type</Label>
               <select
                 value={checklistType}
-                onChange={(e) =>
-                  setChecklistType(e.target.value as "Pre" | "Post")
-                }
+                onChange={(e) => setChecklistType(e.target.value as any)}
                 className="w-full border rounded p-2"
               >
-                <option value="Pre">Pre</option>
-                <option value="Post">Post</option>
+                <option value="Pre">Pre-Delivery</option>
+                <option value="Post">Post-Delivery</option>
               </select>
             </div>
 
             <div>
-              <Label>Date</Label>
+              <Label>Date of Check</Label>
               <Flatpickr
-                value={dateOfCheck ? new Date(dateOfCheck) : null}
+                value={dateOfCheck ? new Date(dateOfCheck) : undefined}
                 options={{ dateFormat: "Y-m-d" }}
-                onChange={(arr) => {
-                  if (arr && arr[0]) {
-                    const d = arr[0] as Date;
-                    const year = d.getFullYear();
-                    const month = String(d.getMonth() + 1).padStart(2, "0");
-                    const day = String(d.getDate()).padStart(2, "0");
-                    setDateOfCheck(`${year}-${month}-${day}`);
-                  }
-                }}
+                onChange={([date]) =>
+                  setDateOfCheck(date.toISOString().split("T")[0])
+                }
                 className="w-full border rounded p-2"
+                placeholder="Select date"
+                required
               />
             </div>
           </div>
@@ -260,33 +244,44 @@ export default function EditSafetyChecklist() {
           <div>
             <Label>Existing Attachments</Label>
             {existingAttachments.length === 0 ? (
-              <div className="text-gray-500">No attachments</div>
+              <p className="text-gray-500 italic">No attachments</p>
             ) : (
-              <div className="flex flex-col gap-2">
-                {existingAttachments.map((a) => (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                {existingAttachments.map((key) => (
                   <div
-                    key={a}
-                    className="flex items-center justify-between gap-3 border rounded p-2"
+                    key={key}
+                    className="border rounded-lg overflow-hidden bg-gray-50"
                   >
-                    <a
-                      href={buildFileUrl(a)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-2"
-                    >
-                      <DownloadIcon className="w-4 h-4" />
-                      <span className="truncate max-w-xs">
-                        {a.split("/").pop()}
-                      </span>
-                    </a>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => removeAttachmentConfirm(a)}
-                        className="text-red-600"
+                    {/\.(jpe?g|png|gif)$/i.test(key) ? (
+                      <img
+                        src={buildFileUrl(BASE_IMAGE_URL + key)}
+                        alt="attachment"
+                        className="w-full h-48 object-cover"
+                      />
+                    ) : (
+                      <div className="h-48 flex items-center justify-center bg-gray-200 text-gray-600">
+                        <span className="text-sm">PDF / File</span>
+                      </div>
+                    )}
+                    <div className="p-2 flex justify-between items-center bg-white">
+                      <a
+                        href={buildFileUrl(BASE_IMAGE_URL + key)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-600 text-sm flex items-center gap-1"
                       >
-                        <TrashBinIcon className="w-4 h-4" />
-                      </button>
+                        <DownloadIcon className="w-5 h-5" />
+                      </a>
+                      
+                      {/* <button
+                        type="button"
+                        onClick={() =>
+                          removeAttachmentConfirm(BASE_IMAGE_URL + key)
+                        }
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <TrashBinIcon className="w-5 h-5" />
+                      </button> */}
                     </div>
                   </div>
                 ))}
@@ -295,20 +290,24 @@ export default function EditSafetyChecklist() {
           </div>
 
           <div>
-            <Label>Upload New Attachments</Label>
-            <FileInput onChange={handleNewFiles} multiple />
+            <Label>Add New Attachments</Label>
+            <FileInput
+              onChange={handleNewFiles}
+              multiple
+              accept="image/*,.pdf"
+            />
             {newFiles.length > 0 && (
-              <div className="mt-2 flex flex-col gap-2">
+              <div className="mt-3 space-y-2">
                 {newFiles.map((f, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between gap-3 border rounded p-2"
+                    className="flex items-center justify-between border rounded p-3 bg-gray-50"
                   >
-                    <div className="truncate max-w-xs">{f.name}</div>
+                    <span className="truncate max-w-md">{f.name}</span>
                     <button
                       type="button"
                       onClick={() => removeNewFile(i)}
-                      className="text-red-600"
+                      className="text-red-600 hover:text-red-800"
                     >
                       Remove
                     </button>
@@ -318,18 +317,18 @@ export default function EditSafetyChecklist() {
             )}
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-4">
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-70"
             >
               {loading ? "Updating..." : "Update Checklist"}
             </button>
             <button
               type="button"
               onClick={() => navigate("/safety-checklists")}
-              className="px-5 py-2 border rounded"
+              className="px-6 py-2 border rounded hover:bg-gray-100"
             >
               Cancel
             </button>
@@ -337,9 +336,11 @@ export default function EditSafetyChecklist() {
 
           {message && (
             <div
-              className={
-                messageType === "success" ? "text-green-600" : "text-red-600"
-              }
+              className={`mt-4 p-3 rounded ${
+                messageType === "success"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
+              }`}
             >
               {message}
             </div>

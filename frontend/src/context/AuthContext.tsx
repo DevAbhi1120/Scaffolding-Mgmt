@@ -1,24 +1,25 @@
-import { createContext, useState, useEffect, ReactNode } from 'react';
-import { jwtDecode, JwtPayload } from 'jwt-decode';
-
-
-
+import { createContext, useState, useEffect, ReactNode } from "react";
+import { jwtDecode, JwtPayload } from "jwt-decode";
 
 interface CustomJwtPayload extends JwtPayload {
-  name?: string;
   email?: string;
   role?: string;
+  sub?: string; // user id
 }
 
 interface AuthContextType {
-  user: CustomJwtPayload | null;
-  login: (token: string) => void;
+  token: string | null;
+  user: any | null; // FULL user object from backend
+  decoded: CustomJwtPayload | null; // decoded token
+  login: (token: string, user: any) => void;
   logout: () => void;
   isAuthReady: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType>({
+  token: null,
   user: null,
+  decoded: null,
   login: () => {},
   logout: () => {},
   isAuthReady: false,
@@ -29,55 +30,70 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<CustomJwtPayload | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<any | null>(null);
+  const [decoded, setDecoded] = useState<CustomJwtPayload | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
-useEffect(() => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    try {
-      const decoded = jwtDecode<CustomJwtPayload>(token);
+  // LOAD FROM LOCALSTORAGE ON PAGE REFRESH
+  useEffect(() => {
+    const storedToken = localStorage.getItem("token");
+    const storedUser = localStorage.getItem("user");
 
-      const now = Date.now() / 1000; // current time in seconds
+    if (storedToken) {
+      try {
+        const dec = jwtDecode<CustomJwtPayload>(storedToken);
+        const now = Date.now() / 1000;
 
-      if (decoded.exp && decoded.exp > now) {
-        setUser(decoded);
-      } else {
-        // Token expired
-        localStorage.removeItem('token');
-        setUser(null);
+        if (dec.exp && dec.exp > now) {
+          setToken(storedToken);
+          setDecoded(dec);
+          setUser(storedUser ? JSON.parse(storedUser) : null);
+
+          // Auto logout on expiration
+          const expirationTime = dec.exp * 1000 - Date.now();
+          setTimeout(() => logout(), expirationTime);
+        } else {
+          logout();
+        }
+      } catch {
+        logout();
       }
-    } catch (err) {
-      console.error('Invalid token');
-      localStorage.removeItem('token');
-      setUser(null);
     }
-  }
-  setIsAuthReady(true);
-}, []);
 
+    setIsAuthReady(true);
+  }, []);
 
-  const login = (token: string) => {
-      localStorage.setItem('token', token);
-      const decoded = jwtDecode<CustomJwtPayload>(token);
-      setUser(decoded);
+  const login = (token: string, user: any) => {
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(user));
 
-      if (decoded.exp) {
-        const expirationTime = decoded.exp * 1000 - Date.now(); // milliseconds
-        setTimeout(() => {
-          logout(); // Auto logout when token expires
-        }, expirationTime);
-      }
-};
+    setToken(token);
+    setUser(user);
 
+    const dec = jwtDecode<CustomJwtPayload>(token);
+    setDecoded(dec);
+
+    // Auto logout when token expires
+    if (dec.exp) {
+      const expirationTime = dec.exp * 1000 - Date.now();
+      setTimeout(() => logout(), expirationTime);
+    }
+  };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+
+    setToken(null);
     setUser(null);
+    setDecoded(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthReady }}>
+    <AuthContext.Provider
+      value={{ token, user, decoded, login, logout, isAuthReady }}
+    >
       {children}
     </AuthContext.Provider>
   );

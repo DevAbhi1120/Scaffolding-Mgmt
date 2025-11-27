@@ -1,13 +1,16 @@
 import { UsersService } from './users.service';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 export declare class UsersController {
     private svc;
     constructor(svc: UsersService);
-    create(body: any): Promise<import("../database/entities/user.entity").User>;
-    list(): Promise<import("../database/entities/user.entity").User[]>;
+    create(body: CreateUserDto): Promise<any>;
+    list(): Promise<any[]>;
     getOne(id: string): Promise<{
-        user: import("../database/entities/user.entity").User;
+        user: any;
     }>;
-    update(id: string, body: any): Promise<import("../database/entities/user.entity").User>;
+    updateJson(id: string, body: UpdateUserDto): Promise<any>;
+    updateWithFile(id: string, file: Express.Multer.File, body: UpdateUserDto): Promise<any>;
     delete(id: string): Promise<{
         success: boolean;
     }>;

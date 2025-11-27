@@ -1,63 +1,54 @@
-// src/pages/UserProfiles.tsx (or wherever this lives)
+// src/pages/UserProfiles.tsx
 import { useEffect, useState } from "react";
-import axios from "axios";
-
+import { useNavigate } from "react-router-dom";
+import api from "../api/axios";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import UserMetaCard from "../components/UserProfile/UserMetaCard";
 import UserInfoCard from "../components/UserProfile/UserInfoCard";
 import UserAddressCard from "../components/UserProfile/UserAddressCard";
 import PageMeta from "../components/common/PageMeta";
-import { BASE_URL } from "../components/BaseUrl/config";
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  phone?: string;
-  profile_image?: string | null;
-  status?: number;
-  // add any extra fields that UserMetaCard / UserInfoCard / UserAddressCard expect
-}
+import { getUser, getToken, clearAuth } from "../auth/auth";
 
 export default function UserProfiles() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const fetchLoggedInUser = async () => {
     try {
       setLoading(true);
       setErrorMsg(null);
 
-      const storedUser = localStorage.getItem("user");
-      if (!storedUser) {
-        setErrorMsg("No logged-in user information found.");
-        setLoading(false);
+      const storedUser = getUser();
+      const token = getToken();
+
+      if (!token || !storedUser) {
+
+        clearAuth();
+        navigate("/login");
         return;
       }
 
-      const parsedUser = JSON.parse(storedUser);
-      const userId = parsedUser?.id;
-
+      const userId = storedUser?.id;
       if (!userId) {
         setErrorMsg("User ID missing from stored user data.");
         setLoading(false);
         return;
       }
 
-      const token = localStorage.getItem("token");
-
-      const res = await axios.get(`${BASE_URL}users/${userId}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : "",
-        },
-      });
-
-      // backend returns { user: ... }
-      setUser(res.data.user);
-    } catch (error) {
+      const res = await api.get(`users/${userId}`);
+      // controller returns { user } or service may return sanitized user directly
+      const u = res.data.user ?? res.data;
+      setUser(u);
+    } catch (error: any) {
       console.error("Failed to fetch logged-in user:", error);
+      // if 401 -> token invalid: redirect to login
+      if (error?.response?.status === 401) {
+        clearAuth();
+        navigate("/login");
+        return;
+      }
       setErrorMsg("Failed to load profile.");
     } finally {
       setLoading(false);
@@ -66,6 +57,8 @@ export default function UserProfiles() {
 
   useEffect(() => {
     fetchLoggedInUser();
+    // optionally re-fetch when token/user changes elsewhere in app
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -76,8 +69,8 @@ export default function UserProfiles() {
           description="Profile page"
         />
         <PageBreadcrumb pageTitle="Profile" />
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
-          <p className="text-gray-700 dark:text-gray-300">Loading profile...</p>
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 lg:p-6">
+          <p className="text-gray-700">Loading profile...</p>
         </div>
       </>
     );
@@ -91,7 +84,7 @@ export default function UserProfiles() {
           description="Profile page"
         />
         <PageBreadcrumb pageTitle="Profile" />
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 lg:p-6">
           <p className="text-red-500">
             {errorMsg || "User not found or could not be loaded."}
           </p>
@@ -107,15 +100,14 @@ export default function UserProfiles() {
         description="Edit logged-in user profile"
       />
       <PageBreadcrumb pageTitle="Profile" />
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
-        <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-white/90 lg:mb-7">
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 lg:p-6">
+        <h3 className="mb-5 text-lg font-semibold text-gray-800 lg:mb-7">
           Profile
         </h3>
         <div className="space-y-6">
-          {/* All three now receive the logged-in user */}
-          <UserMetaCard user={user} />
-          <UserInfoCard user={user} />
-          <UserAddressCard user={user} />
+          <UserMetaCard user={user} onUpdated={fetchLoggedInUser} />
+          <UserInfoCard user={user} onUpdated={fetchLoggedInUser} />
+          <UserAddressCard user={user} onUpdated={fetchLoggedInUser} />
         </div>
       </div>
     </>

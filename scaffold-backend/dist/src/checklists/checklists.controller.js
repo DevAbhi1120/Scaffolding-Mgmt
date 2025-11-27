@@ -44,8 +44,40 @@ let ChecklistsController = class ChecklistsController {
             const uploaded = await this.filesService.uploadMany(files);
             dto.attachments = uploaded.map((u) => u.key || u.url || String(u));
         }
-        const saved = await this.svc.create(dto);
-        return saved;
+        return this.svc.create(dto);
+    }
+    async update(id, body, files) {
+        let checklistData;
+        try {
+            checklistData = typeof body.checklistData === 'string'
+                ? JSON.parse(body.checklistData)
+                : body.checklistData;
+        }
+        catch (e) {
+            throw new common_1.BadRequestException('Invalid checklistData JSON');
+        }
+        let existingAttachments = [];
+        try {
+            existingAttachments = body.existingAttachments
+                ? JSON.parse(body.existingAttachments)
+                : [];
+        }
+        catch (e) {
+            existingAttachments = [];
+        }
+        const dto = {
+            orderId: body.orderId ?? null,
+            submittedBy: body.submittedBy ?? null,
+            checklistData,
+            dateOfCheck: body.dateOfCheck,
+            existingAttachments,
+            preserved: body.preserved,
+        };
+        if (files && files.length > 0) {
+            const uploaded = await this.filesService.uploadMany(files);
+            dto.attachments = uploaded.map((u) => u.key || u.url || String(u));
+        }
+        return this.svc.update(id, dto);
     }
     async list(q) {
         const filters = {};
@@ -96,6 +128,31 @@ __decorate([
     __metadata("design:paramtypes", [Object, Array]),
     __metadata("design:returntype", Promise)
 ], ChecklistsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Put)(':id'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('attachments', 10, {
+        storage: (0, multer_1.diskStorage)({
+            destination: (req, file, cb) => cb(null, './uploads/checklists'),
+            filename: (req, file, cb) => {
+                const id = (0, uuid_1.v4)();
+                const ext = (0, path_1.extname)(file.originalname) || '';
+                cb(null, `${id}${ext}`);
+            },
+        }),
+        fileFilter: (req, file, cb) => {
+            const allowed = /jpeg|jpg|png|gif|pdf/;
+            const ok = allowed.test(file.mimetype);
+            cb(ok ? null : new common_1.BadRequestException('Only images/pdf allowed'), ok);
+        },
+        limits: { fileSize: 10 * 1024 * 1024 },
+    })),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.UploadedFiles)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Array]),
+    __metadata("design:returntype", Promise)
+], ChecklistsController.prototype, "update", null);
 __decorate([
     (0, common_1.Get)(),
     __param(0, (0, common_1.Query)()),

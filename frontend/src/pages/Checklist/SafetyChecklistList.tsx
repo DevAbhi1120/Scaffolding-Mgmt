@@ -121,7 +121,7 @@ export default function SafetyChecklistList() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => navigate("/add-safety-checklist")}
+                onClick={() => navigate("/add-safety-checklists")}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
                 + Add Checklist
@@ -210,7 +210,7 @@ export default function SafetyChecklistList() {
                                       alt={a}
                                       className="object-cover w-16 h-16 rounded"
                                     />
-                                    <a
+                                    {/* <a
                                       key={i}
                                       href={buildFileUrl(BASE_IMAGE_URL + a)}
                                       target="_blank"
@@ -219,7 +219,7 @@ export default function SafetyChecklistList() {
                                       title={a.split("/").pop()}
                                     >
                                       <DownloadIcon className="w-4 h-4" />
-                                    </a>
+                                    </a> */}
                                   </>
                                 ))
                               ) : (

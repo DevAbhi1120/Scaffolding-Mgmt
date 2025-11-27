@@ -24,6 +24,12 @@ let UsersService = class UsersService {
     constructor(usersRepo) {
         this.usersRepo = usersRepo;
     }
+    sanitize(user) {
+        if (!user)
+            return user;
+        const { passwordHash, ...rest } = user;
+        return rest;
+    }
     async create(data) {
         if (!data.password) {
             throw new common_1.BadRequestException('Password is required');
@@ -34,51 +40,57 @@ let UsersService = class UsersService {
         if (!data.email) {
             throw new common_1.BadRequestException('Email is required');
         }
-        const existing = await this.usersRepo.findOne({
-            where: { email: data.email },
-        });
-        if (existing) {
+        const existing = await this.usersRepo.findOne({ where: { email: data.email } });
+        if (existing)
             throw new common_1.BadRequestException('Email is already in use');
-        }
-        const passwordHash = await bcrypt.hash(data.password, 10);
+        const passwordHash = await bcrypt.hash(data.password, parseInt(process.env.SALT_ROUNDS || '10', 10));
         const user = this.usersRepo.create({
             name: data.name,
             email: data.email,
             passwordHash,
             role: data.role ?? role_enum_1.Role.TEAM_MEMBER,
             phone: data.phone,
+            profileImage: data.profileImage,
+            socialFacebook: data.socialFacebook,
+            socialX: data.socialX,
+            socialLinkedin: data.socialLinkedin,
+            socialInstagram: data.socialInstagram,
+            country: data.country,
+            cityState: data.cityState,
+            postalCode: data.postalCode,
+            taxId: data.taxId,
         });
-        return await this.usersRepo.save(user);
+        const saved = await this.usersRepo.save(user);
+        return this.sanitize(saved);
     }
     async findByEmail(email) {
         return this.usersRepo.findOne({ where: { email } });
     }
     async findAll() {
-        return this.usersRepo.find();
+        const users = await this.usersRepo.find();
+        return users.map(u => this.sanitize(u));
     }
     async findOne(id) {
         const user = await this.usersRepo.findOne({ where: { id } });
-        if (!user) {
-            throw new common_1.NotFoundException('User not found');
-        }
-        return user;
+        if (!user)
+            throw new common_1.NotFoundException(`User with ID ${id} not found`);
+        return this.sanitize(user);
     }
     async update(id, data) {
-        const user = await this.findOne(id);
+        const user = await this.usersRepo.findOne({ where: { id } });
+        if (!user)
+            throw new common_1.NotFoundException(`User with ID ${id} not found`);
         if (data.email && data.email !== user.email) {
-            const existing = await this.usersRepo.findOne({
-                where: { email: data.email },
-            });
-            if (existing) {
+            const existing = await this.usersRepo.findOne({ where: { email: data.email } });
+            if (existing)
                 throw new common_1.BadRequestException('Email is already in use');
-            }
             user.email = data.email;
         }
         if (data.password) {
             if (!PASSWORD_REGEX.test(data.password)) {
                 throw new common_1.BadRequestException('Password must be 8+ chars and include uppercase, lowercase, number and special character');
             }
-            user.passwordHash = await bcrypt.hash(data.password, 10);
+            user.passwordHash = await bcrypt.hash(data.password, parseInt(process.env.SALT_ROUNDS || '10', 10));
         }
         if (typeof data.name === 'string')
             user.name = data.name;
@@ -86,13 +98,35 @@ let UsersService = class UsersService {
             user.role = data.role;
         if (typeof data.phone === 'string')
             user.phone = data.phone;
-        if (typeof data.status === 'number') {
+        if (typeof data.profileImage === 'string')
+            user.profileImage = data.profileImage;
+        if (data.profileImageFile)
+            user.profileImage = data.profileImageFile;
+        if (typeof data.socialFacebook === 'string')
+            user.socialFacebook = data.socialFacebook;
+        if (typeof data.socialX === 'string')
+            user.socialX = data.socialX;
+        if (typeof data.socialLinkedin === 'string')
+            user.socialLinkedin = data.socialLinkedin;
+        if (typeof data.socialInstagram === 'string')
+            user.socialInstagram = data.socialInstagram;
+        if (typeof data.country === 'string')
+            user.country = data.country;
+        if (typeof data.cityState === 'string')
+            user.cityState = data.cityState;
+        if (typeof data.postalCode === 'string')
+            user.postalCode = data.postalCode;
+        if (typeof data.taxId === 'string')
+            user.taxId = data.taxId;
+        if (typeof data.status === 'number')
             user.status = data.status;
-        }
-        return this.usersRepo.save(user);
+        const saved = await this.usersRepo.save(user);
+        return this.sanitize(saved);
     }
     async remove(id) {
-        const user = await this.findOne(id);
+        const user = await this.usersRepo.findOne({ where: { id } });
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
         await this.usersRepo.remove(user);
     }
 };

@@ -21,17 +21,31 @@ let AuthService = class AuthService {
     }
     async validateUser(email, password) {
         const user = await this.usersService.findByEmail(email);
-        if (user && await bcrypt.compare(password, user.passwordHash)) {
-            const { passwordHash, ...result } = user;
-            return result;
+        const invalidMsg = 'Invalid email or password';
+        if (!user) {
+            throw new common_1.UnauthorizedException(invalidMsg);
         }
-        return null;
+        if (typeof user.status !== 'undefined' && user.status !== 1) {
+            throw new common_1.UnauthorizedException('Account is disabled');
+        }
+        const passwordHash = user.passwordHash;
+        if (!passwordHash) {
+            throw new common_1.UnauthorizedException(invalidMsg);
+        }
+        const matches = await bcrypt.compare(password, passwordHash);
+        if (!matches) {
+            throw new common_1.UnauthorizedException(invalidMsg);
+        }
+        const { passwordHash: _ph, ...safe } = user;
+        return safe;
     }
     async login(user) {
         const payload = { email: user.email, sub: user.id, role: user.role };
+        const access_token = this.jwtService.sign(payload);
+        const { passwordHash: _ph, ...safeUser } = user;
         return {
-            access_token: this.jwtService.sign(payload),
-            user,
+            access_token,
+            user: safeUser,
         };
     }
     async register(data) {

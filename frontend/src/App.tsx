@@ -18,10 +18,10 @@ import Blank from "./pages/Blank";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
-import UserList from "./pages/Users/UserList"
-import AddUser from "./pages/Users/AddUser"
-import EditProfile from "./pages/Users/EditProfile"
-import LoginIn from "./pages/Login"
+import UserList from "./pages/Users/UserList";
+import AddUser from "./pages/Users/AddUser";
+import EditProfile from "./pages/Users/EditProfile";
+import LoginIn from "./pages/Login";
 import AddCategory from "./pages/Category/AddCategory";
 import CategoryList from "./pages/Category/CategoryList";
 import EditCategory from "./pages/Category/EditCategory";
@@ -44,7 +44,9 @@ import EditSafetyChecklist from "./pages/Checklist/EditSafetyChecklist";
 import EditBuilders from "./pages/Builders/EditBuilders";
 import BuildersList from "./pages/Builders/BuildersList";
 import AddBuilders from "./pages/Builders/AddBuilders";
-
+import AddSwms from "./pages/Swms/AddSwms";
+import SwmsList from "./pages/Swms/SwmsList";
+import EditSwms from "./pages/Swms/EditSwms";
 
 export default function App() {
   return (
@@ -78,16 +80,32 @@ export default function App() {
 
             <Route path="/add-product-type" element={<AddProductType />} />
             <Route path="/product-type-list" element={<ProductTypeList />} />
-            <Route path="/edit-product-type/:id" element={<EditProductType />} />
+            <Route
+              path="/edit-product-type/:id"
+              element={<EditProductType />}
+            />
 
             <Route path="/add-order" element={<AddOrder />} />
             <Route path="/order-list" element={<OrderList />} />
             <Route path="/edit-order/:id" element={<EditOrder />} />
             <Route path="/view-order/:id" element={<ViewOrder />} />
 
-            <Route path="/add-safety-checklists" element={<AddSafetyChecklist />} />
-            <Route path="/safety-checklists" element={<SafetyChecklistList />} />
-            <Route path="/edit-safety-checklist/:id" element={<EditSafetyChecklist />} />
+            <Route
+              path="/add-safety-checklists"
+              element={<AddSafetyChecklist />}
+            />
+            <Route
+              path="/safety-checklists"
+              element={<SafetyChecklistList />}
+            />
+            <Route
+              path="/edit-safety-checklist/:id"
+              element={<EditSafetyChecklist />}
+            />
+
+            <Route path="/add-Swms" element={<AddSwms />} />
+            <Route path="/Swms" element={<SwmsList />} />
+            <Route path="/edit-Swms/:id" element={<EditSwms />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />

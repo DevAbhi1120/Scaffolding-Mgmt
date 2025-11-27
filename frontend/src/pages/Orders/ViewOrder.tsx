@@ -1,32 +1,39 @@
+// src/pages/orders/ViewOrder.tsx
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
 import Swal from "sweetalert2";
 
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Label from "../../components/form/Label";
+import api from "../../api/axios";
 
 export default function ViewOrder() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
-  const [formData, setFormData] = useState<any>(null);
-  const [orderItems, setOrderItems] = useState<any[]>([]);
+  const [order, setOrder] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchOrder = async () => {
+      setLoading(true);
       try {
-        const res = await axios.get(`http://localhost:5000/api/orders/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const order = res.data;
-        setFormData(order);
-        setOrderItems(order.items || []);
+        const res = await api.get(`orders/${id}`);
+        // depending on backend, res.data might be { items: [...] } or a single order object
+        // try to normalize:
+        const data = res.data;
+        // If it's a list wrapper:
+        if (data && Array.isArray(data.items) && data.items.length > 0) {
+          // try to find item with same id
+          const found =
+            data.items.find((it: any) => it.id === id) ?? data.items[0];
+          setOrder(found);
+        } else {
+          // assume single order object
+          setOrder(data);
+        }
       } catch (err) {
         console.error("Error fetching order", err);
         Swal.fire("Error", "Failed to fetch order details", "error");
@@ -35,98 +42,98 @@ export default function ViewOrder() {
       }
     };
 
-    fetchOrder();
-  }, [id, token]);
+    if (id) fetchOrder();
+  }, [id]);
 
-  if (loading) {
-    return <p className="text-center">Loading order details...</p>;
-  }
-
-  if (!formData) {
+  if (loading) return <p className="text-center">Loading order details...</p>;
+  if (!order)
     return <p className="text-center text-red-600">Order not found</p>;
-  }
+
+  const items = order.items ?? []; // if your single-order response includes items
 
   return (
     <>
       <PageMeta title="View Order" />
-      <PageBreadcrumb title="View Order" subName="Orders" />
+      <PageBreadcrumb pageTitle="View Order" subName="Orders" />
 
       <ComponentCard>
         <div className="space-y-6">
-          {/* User Info */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>User Name</Label>
+              <Label>Order ID</Label>
               <p className="p-2 border rounded bg-gray-50 dark:bg-gray-800">
-                {formData.user_name}
+                {order.id}
               </p>
             </div>
 
             <div>
-              <Label>User Email</Label>
+              <Label>Builder ID</Label>
               <p className="p-2 border rounded bg-gray-50 dark:bg-gray-800">
-                {formData.user_email}
+                {order.builderId}
               </p>
             </div>
 
             <div>
-              <Label>Phone</Label>
+              <Label>Start Date</Label>
               <p className="p-2 border rounded bg-gray-50 dark:bg-gray-800">
-                {formData.user_phonenumber}
+                {order.startDate
+                  ? new Date(order.startDate).toLocaleDateString()
+                  : "-"}
               </p>
             </div>
 
             <div>
-              <Label>Address</Label>
+              <Label>Status</Label>
               <p className="p-2 border rounded bg-gray-50 dark:bg-gray-800">
-                {formData.user_address}
+                {order.status}
               </p>
             </div>
-          </div>
-
-          {/* Order Info */}
-          <div>
-            <Label>Order Date</Label>
-            <p className="p-2 border rounded bg-gray-50 dark:bg-gray-800">
-              {new Date(formData.order_date).toLocaleDateString()}
-            </p>
           </div>
 
           <div>
             <Label>Notes</Label>
             <p className="p-2 border rounded bg-gray-50 dark:bg-gray-800">
-              {formData.notes || "-"}
+              {order.notes || "-"}
             </p>
           </div>
 
           <div>
-            <Label>Status</Label>
+            <Label>Created At</Label>
             <p className="p-2 border rounded bg-gray-50 dark:bg-gray-800">
-              {formData.status}
+              {order.createdAt
+                ? new Date(order.createdAt).toLocaleString()
+                : "-"}
             </p>
           </div>
 
-          {/* Products */}
           <div>
-            <Label>Products</Label>
+            <Label>Items</Label>
             <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
-              {orderItems.length === 0 ? (
-                <p>No products in this order.</p>
+              {items.length === 0 ? (
+                <p>No items in this order.</p>
               ) : (
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-gray-200 dark:bg-gray-700">
-                      <th className="border p-2 text-left">Product</th>
-                      <th className="border p-2 text-left">Quantity</th>
-                      <th className="border p-2 text-left">Price</th>
+                      <th className="border p-2 text-left">ID</th>
+                      <th className="border p-2 text-left">Builder ID</th>
+                      <th className="border p-2 text-left">Status</th>
+                      <th className="border p-2 text-left">Start Date</th>
+                      <th className="border p-2 text-left">Notes</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {orderItems.map((item, index) => (
-                      <tr key={index}>
-                        <td className="border p-2">{item.product_name || item.product_id}</td>
-                        <td className="border p-2">{item.order_qty}</td>
-                        <td className="border p-2">{item.price || "-"}</td>
+                    {items.map((it: any) => (
+                      <tr key={it.id}>
+                        <td className="border p-2">{it.id}</td>
+                        <td className="border p-2">{it.builderId}</td>
+                        <td className="border p-2">{it.status}</td>
+                        <td className="border p-2">
+                          {it.startDate
+                            ? new Date(it.startDate).toLocaleDateString()
+                            : "-"}
+                        </td>
+                        <td className="border p-2">{it.notes || "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -135,7 +142,6 @@ export default function ViewOrder() {
             </div>
           </div>
 
-          {/* Back Button */}
           <div className="flex justify-center">
             <button
               onClick={() => navigate("/order-list")}

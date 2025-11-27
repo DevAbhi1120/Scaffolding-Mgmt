@@ -54,6 +54,31 @@ let ChecklistsService = class ChecklistsService {
         }
         return saved;
     }
+    async update(id, dto) {
+        const checklist = await this.repo.findOne({ where: { id } });
+        if (!checklist)
+            throw new common_1.NotFoundException('Checklist not found');
+        const date = dto.dateOfCheck ? new Date(dto.dateOfCheck) : checklist.dateOfCheck;
+        if (dto.dateOfCheck && Number.isNaN(date.getTime())) {
+            throw new common_1.BadRequestException('Invalid dateOfCheck');
+        }
+        const preservedAttachments = Array.isArray(dto.existingAttachments)
+            ? dto.existingAttachments
+            : checklist.attachments ?? [];
+        const finalAttachments = dto.attachments
+            ? [...preservedAttachments, ...(dto.attachments || [])]
+            : preservedAttachments;
+        const updated = await this.repo.save({
+            ...checklist,
+            orderId: dto.orderId !== undefined ? dto.orderId : checklist.orderId,
+            submittedBy: dto.submittedBy || checklist.submittedBy,
+            checklistData: dto.checklistData || checklist.checklistData,
+            dateOfCheck: date,
+            attachments: finalAttachments,
+            preserved: dto.preserved ?? checklist.preserved,
+        });
+        return updated;
+    }
     async findByOrder(orderId) {
         const qb = this.repo.createQueryBuilder('c')
             .leftJoinAndSelect(order_entity_1.Order, 'o', `CONVERT(o.id USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = CONVERT(c.orderId USING utf8mb4) COLLATE utf8mb4_0900_ai_ci`)
@@ -76,9 +101,8 @@ let ChecklistsService = class ChecklistsService {
             qb.andWhere('c.dateOfCheck >= :from', { from: filters.from });
         if (filters.to)
             qb.andWhere('c.dateOfCheck <= :to', { to: filters.to });
-        if (filters.builderId) {
+        if (filters.builderId)
             qb.andWhere('o.builderId = :builderId', { builderId: filters.builderId });
-        }
         if (filters.search) {
             qb.andWhere('(JSON_EXTRACT(c.checklistData, "$") LIKE :s OR c.id LIKE :s)', { s: `%${filters.search}%` });
         }
@@ -87,9 +111,8 @@ let ChecklistsService = class ChecklistsService {
     }
     async delete(id) {
         const checklist = await this.repo.findOne({ where: { id } });
-        if (!checklist) {
+        if (!checklist)
             throw new common_1.NotFoundException('Checklist not found');
-        }
         if (Array.isArray(checklist.attachments) && checklist.attachments.length > 0) {
             for (const file of checklist.attachments) {
                 try {
