@@ -1,60 +1,51 @@
+// src/pages/swms/AddSwms.tsx
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import Flatpickr from "react-flatpickr";
 import "flatpickr/dist/themes/material_green.css";
-import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
 
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import ComponentCard from "../../components/common/ComponentCard";
 import Label from "../../components/form/Label";
-import FileInput from "../../components/form/input/FileInput";
-import { BASE_URL, BASE_IMAGE_URL } from "../../components/BaseUrl/config";
-import Swal from "sweetalert2";
+import api from "../../api/axios";
+import axios from "axios";
 
 type OrderOption = {
   id: string;
   builderId?: string;
   startDate?: string;
   notes?: string;
-  items?: any[];
 };
 
 export default function AddSwms() {
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderOption[]>([]);
-  const [orderId, setOrderId] = useState("");
+  const [orderId, setOrderId] = useState<string>("");
+  const [projectName, setProjectName] = useState<string>("");
   const [type, setType] = useState<"Pre" | "Post">("Pre");
   const [dateOfCheck, setDateOfCheck] = useState<string>("");
-  const [checklistItems, setChecklistItems] = useState<Record<string, boolean>>(
-    {}
-  );
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState<string>("");
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const navigate = useNavigate();
 
-  // Helper - parse server validation errors (if your backend returns e.g. { message, errors: { field: '...' } })
-  const handleServerErrors = (err: any) => {
-    if (!err) return;
-    const data = err?.response?.data;
-    if (data?.errors && typeof data.errors === "object") {
-      setErrors(data.errors);
-    } else if (data?.message) {
-      setErrors({ _global: data.message });
-    } else {
-      setErrors({ _global: "An unexpected error occurred" });
-    }
-  };
+  // checklist items -> become tasks
+  const checklistTemplate = [
+    { key: "erect_scaffold", label: "Erect scaffold", highRisk: true },
+    { key: "inspection_done", label: "Inspection done", highRisk: false },
+    { key: "area_cleared", label: "Work area cleared", highRisk: false },
+    { key: "equipment_checked", label: "Equipment checked", highRisk: false },
+  ];
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({});
 
+  // load orders
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await axios.get(`${BASE_URL}orders`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        const items = res.data?.items ?? res.data?.data ?? res.data ?? [];
+        const res = await api.get("orders");
+        const items = res.data?.items ?? res.data ?? [];
         setOrders(items);
       } catch (err) {
         console.error("Failed to fetch orders", err);
@@ -64,126 +55,153 @@ export default function AddSwms() {
     fetchOrders();
   }, []);
 
-  // previews
+  // file preview urls
   useEffect(() => {
     const urls = files.map((f) => URL.createObjectURL(f));
     setFilePreviews(urls);
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, [files]);
 
-  const clearFieldError = (field: string) => {
-    setErrors((prev) => {
-      const n = { ...prev };
-      delete n[field];
+  const toggleChecklist = (key: string) =>
+    setChecklist((p) => ({ ...p, [key]: !p[key] }));
+
+  const clearError = (k: string) =>
+    setErrors((p) => {
+      const n = { ...p };
+      delete n[k];
       return n;
     });
-  };
 
-  // toggle checklist item (example items; you can load from server)
-  const toggleItem = (key: string) => {
-    setChecklistItems((prev) => ({ ...prev, [key]: !prev[key] }));
+  const handleFileChange = (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = ev.target.files ? Array.from(ev.target.files) : [];
+    setFiles((prev) => [...prev, ...selected].slice(0, 20)); // cap 20 files
+  };
+  const removeFile = (i: number) =>
+    setFiles((prev) => prev.filter((_, idx) => idx !== i));
+
+  // helper upload single file -> returns url/filename or null
+  const uploadOne = async (file: File): Promise<string | null> => {
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      // use api (attaches auth) if available, otherwise fallback to axios with BASE_URL set inside api
+      const client = api ?? axios;
+      const res = await client.post("uploads", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const d = res.data ?? {};
+      return d.url ?? d.filename ?? d.path ?? null;
+    } catch (e) {
+      console.warn("Upload failed:", file.name, e);
+      return null;
+    }
   };
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!orderId) e.orderId = "Please select the order.";
-    if (!dateOfCheck) e.dateOfCheck = "Please pick a date.";
-    if (files.length === 0)
-      e.attachments = "Attach at least one photo as proof.";
+    if (!orderId) e.orderId = "Select related order.";
+    if (!projectName) e.projectName = "Project Name is required.";
+    if (!dateOfCheck) e.dateOfCheck = "Date of check is required.";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const handleFileChange = (ev: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = ev.target.files ? Array.from(ev.target.files) : [];
-    setFiles((prev) => [...prev, ...selected].slice(0, 10)); // max 10
-  };
-
-  const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (ev: React.FormEvent) => {
+    ev.preventDefault();
     setErrors({});
     if (!validate()) return;
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const checklistData = {
+      // build formData object to store as swmsData
+      const swmsFormData = {
+        projectName,
         type,
-        items: Object.keys(checklistItems).filter((k) => checklistItems[k]),
+        dateOfCheck,
         notes,
       };
 
-      // Use multipart/form-data: checklistData as JSON string, dateOfCheck, orderId, attachments[] as files
-      const form = new FormData();
-      form.append("checklistData", JSON.stringify(checklistData));
-      form.append(
-        "dateOfCheck",
-        typeof dateOfCheck === "string"
-          ? dateOfCheck
-          : new Date(dateOfCheck).toISOString().slice(0, 10)
-      );
-      form.append("orderId", orderId);
-      for (const f of files) form.append("attachments", f);
+      // tasks: convert checklist items into tasks array
+      const tasks = checklistTemplate
+        .filter((t) => checklist[t.key])
+        .map((t) => ({ name: t.label, highRisk: !!t.highRisk }));
 
-      const res = await axios.post(`${BASE_URL}checklists`, form, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : "",
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      // submittedBy: try to get logged-in user id from localStorage.user
+      const storedUser = localStorage.getItem("user");
+      const submittedBy =
+        storedUser && JSON.parse(storedUser)?.id
+          ? JSON.parse(storedUser).id
+          : undefined;
 
-      Swal.fire("Saved", "Safety checklist submitted", "success");
-      navigate("/safety-checklists");
+      // upload attachments sequentially (best-effort). store returned urls/paths.
+      const attachments: string[] = [];
+      if (files.length > 0) {
+        for (const f of files) {
+          const uploaded = await uploadOne(f);
+          if (uploaded) attachments.push(uploaded);
+        }
+        if (attachments.length < files.length) {
+          Swal.fire(
+            "Partial upload",
+            "Some attachments failed to upload. The rest were attached.",
+            "warning"
+          );
+        }
+      }
+
+      const payload = {
+        orderId: orderId || undefined,
+        submittedBy: submittedBy ?? undefined,
+        formData: swmsFormData,
+        tasks,
+        attachments,
+      };
+      console.log(payload)
+      // POST to /swms
+      await api.post("swms", payload);
+
+      Swal.fire("Saved", "SWMS submitted successfully", "success");
+      navigate("/swms");
     } catch (err: any) {
-      console.error("Submit failed", err);
-      handleServerErrors(err);
-      Swal.fire(
-        "Error",
-        err?.response?.data?.message ?? "Failed to submit checklist",
-        "error"
-      );
+      console.error("Failed to submit SWMS", err);
+      const data = err?.response?.data;
+      if (data?.errors && typeof data.errors === "object") {
+        setErrors(data.errors);
+      } else if (data?.message) {
+        setErrors({ _global: data.message });
+        Swal.fire("Error", data.message, "error");
+      } else {
+        setErrors({ _global: "Failed to submit SWMS" });
+        Swal.fire("Error", "Failed to submit SWMS", "error");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // sample checklist options (you may fetch this from backend)
-  const sampleItems = [
-    { key: "helmet", label: "Helmet worn" },
-    { key: "boots", label: "Safety boots" },
-    { key: "harness", label: "Harness (where required)" },
-    { key: "clear_area", label: "Work area clear of hazards" },
-  ];
-
   return (
     <>
-      <PageBreadcrumb pageTitle="Add Safety Checklist" subName="Safety" />
+      <PageBreadcrumb pageTitle="Add SWMS" subName="Safety" />
       <ComponentCard>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Order select */}
           <div>
-            <Label>
-              Order <span className="text-red-600">*</span>
-            </Label>
+            <Label>Related Order</Label>
             <select
               value={orderId}
               onChange={(e) => {
-                clearFieldError("orderId");
                 setOrderId(e.target.value);
+                clearError("orderId");
               }}
               className="w-full border rounded p-2"
             >
               <option value="">-- Select order --</option>
               {orders.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {o.id}{" "}
+                  {o.id}
                   {o.startDate
                     ? ` • ${new Date(o.startDate).toLocaleDateString()}`
                     : ""}
+                  {o.notes ? ` • ${o.notes}` : ""}
                 </option>
               ))}
             </select>
@@ -192,13 +210,31 @@ export default function AddSwms() {
             )}
           </div>
 
-          {/* Type + date */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label>Project Name</Label>
+              <input
+                type="text"
+                value={projectName}
+                onChange={(e) => {
+                  setProjectName(e.target.value);
+                  clearError("projectName");
+                }}
+                className="w-full border rounded p-2"
+                required
+              />
+              {errors.projectName && (
+                <p className="text-red-600 text-sm mt-1">
+                  {errors.projectName}
+                </p>
+              )}
+            </div>
+
             <div>
               <Label>Type</Label>
               <select
                 value={type}
-                onChange={(e) => setType(e.target.value as any)}
+                onChange={(e) => setType(e.target.value as "Pre" | "Post")}
                 className="w-full border rounded p-2"
               >
                 <option value="Pre">Pre</option>
@@ -206,10 +242,8 @@ export default function AddSwms() {
               </select>
             </div>
 
-            <div className="md:col-span-2">
-              <Label>
-                Date of Check <span className="text-red-600">*</span>
-              </Label>
+            <div>
+              <Label>Date of Check</Label>
               <Flatpickr
                 value={dateOfCheck}
                 options={{ dateFormat: "Y-m-d" }}
@@ -219,7 +253,7 @@ export default function AddSwms() {
                       ? (dates[0] as Date).toISOString().slice(0, 10)
                       : "";
                   setDateOfCheck(d);
-                  clearFieldError("dateOfCheck");
+                  clearError("dateOfCheck");
                 }}
                 className="w-full border rounded p-2"
               />
@@ -231,18 +265,19 @@ export default function AddSwms() {
             </div>
           </div>
 
-          {/* checklist items */}
           <div>
-            <Label>Checklist Items</Label>
+            <Label>Checklist Tasks</Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {sampleItems.map((it) => (
+              {checklistTemplate.map((it) => (
                 <label key={it.key} className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={!!checklistItems[it.key]}
-                    onChange={() => toggleItem(it.key)}
+                    checked={!!checklist[it.key]}
+                    onChange={() => toggleChecklist(it.key)}
                   />
-                  <span className="text-sm">{it.label}</span>
+                  <span className="text-sm">
+                    {it.label} {it.highRisk ? "(high risk)" : ""}
+                  </span>
                 </label>
               ))}
             </div>
@@ -258,30 +293,23 @@ export default function AddSwms() {
             />
           </div>
 
-          {/* attachments */}
           <div>
-            <Label>
-              Attachments / Photos <span className="text-red-600">*</span>
-            </Label>
+            <Label>Attachments (optional)</Label>
             <input
               type="file"
               accept="image/*,application/pdf"
               multiple
               onChange={handleFileChange}
             />
-            {errors.attachments && (
-              <p className="text-red-600 text-sm mt-1">{errors.attachments}</p>
-            )}
-
             {filePreviews.length > 0 && (
               <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {filePreviews.map((url, i) => (
+                {filePreviews.map((u, i) => (
                   <div
                     key={i}
                     className="relative border rounded overflow-hidden"
                   >
                     <img
-                      src={url}
+                      src={u}
                       alt={`preview-${i}`}
                       className="w-full h-28 object-cover"
                     />
@@ -298,7 +326,6 @@ export default function AddSwms() {
             )}
           </div>
 
-          {/* global server error */}
           {errors._global && (
             <div className="text-red-600 text-sm">{errors._global}</div>
           )}
@@ -309,7 +336,7 @@ export default function AddSwms() {
               className="px-6 py-2 bg-blue-600 text-white rounded"
               disabled={loading}
             >
-              {loading ? "Submitting..." : "Submit Checklist"}
+              {loading ? "Submitting..." : "Submit SWMS"}
             </button>
             <button
               type="button"

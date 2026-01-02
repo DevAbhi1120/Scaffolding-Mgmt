@@ -6,10 +6,23 @@ import { NotificationsService } from '../notifications/notification.service';
 export declare class SwmsService {
     private repo;
     private notificationsSvc;
+    private s3;
+    private bucket;
+    private isS3Enabled;
     constructor(repo: Repository<Swms>, notificationsSvc: NotificationsService);
-    create(dto: CreateSwmsDto): Promise<Swms>;
-    findByOrder(orderId: string): Promise<Swms[]>;
+    private ensureUploadsFolder;
+    private uploadFile;
+    private deleteFile;
+    create(dto: CreateSwmsDto & {
+        files?: Express.Multer.File[];
+    }): Promise<Swms>;
+    update(id: string, dto: UpdateSwmsDto & {
+        newFiles?: Express.Multer.File[];
+    }, isAdmin?: boolean): Promise<Swms>;
     get(id: string): Promise<Swms>;
-    update(id: string, dto: UpdateSwmsDto, isAdmin?: boolean): Promise<Swms>;
     listAll(): Promise<Swms[]>;
+    findByOrder(orderId: string): Promise<Swms[]>;
+    delete(id: string): Promise<{
+        message: string;
+    }>;
 }

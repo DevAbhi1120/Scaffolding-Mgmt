@@ -16,11 +16,9 @@ export class CreateSwmsDto {
   @IsUUID()
   submittedBy?: string;
 
-  // ← YOU SENT "formData" → CHANGE TO "formData"
   @IsObject()
-  formData!: any;  // ← THIS IS WHAT YOU SEND
+  formData!: any;
 
-  // ← YOU SENT "tasks" → CHANGE TO "tasks"
   @IsArray()
   tasks!: TaskDto[];
 

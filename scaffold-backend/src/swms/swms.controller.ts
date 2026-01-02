@@ -1,46 +1,68 @@
 // src/swms/swms.controller.ts
-import { Controller, Post, Body, Get, Param, Put, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Param,
+  Put,
+  Delete,
+  UseGuards,
+  UploadedFiles,
+  UseInterceptors,
+} from '@nestjs/common';
 import { SwmsService } from './swms.service';
 import { CreateSwmsDto } from './dto/create-swms.dto';
 import { UpdateSwmsDto } from './dto/update-swms.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { FilesInterceptor } from '@nestjs/platform-express';
 
-@Controller('swms')  // ← FIXED PREFIX
+@Controller('swms')
 export class SwmsController {
   constructor(private svc: SwmsService) { }
 
-  // CREATE SWMS
   @Post()
   @UseGuards(JwtAuthGuard)
-  async create(@Body() dto: CreateSwmsDto) {
-    return this.svc.create(dto);
+  @UseInterceptors(FilesInterceptor('files', 20)) // max 20 files
+  async create(
+    @Body() dto: CreateSwmsDto,
+    @UploadedFiles() files?: Express.Multer.File[],
+  ) {
+    return this.svc.create({ ...dto, files });
   }
 
-  // LIST ALL SWMS (NEW!)
   @Get()
   @UseGuards(JwtAuthGuard)
   async listAll() {
     return this.svc.listAll();
   }
 
-  // GET BY ORDER
   @Get('order/:orderId')
   @UseGuards(JwtAuthGuard)
   async listByOrder(@Param('orderId') orderId: string) {
     return this.svc.findByOrder(orderId);
   }
 
-  // GET ONE
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   async get(@Param('id') id: string) {
     return this.svc.get(id);
   }
 
-  // UPDATE (admin only later)
   @Put(':id')
   @UseGuards(JwtAuthGuard)
-  async update(@Param('id') id: string, @Body() dto: UpdateSwmsDto) {
-    return this.svc.update(id, dto, true);
+  @UseInterceptors(FilesInterceptor('newFiles', 20))
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateSwmsDto,
+    @UploadedFiles() newFiles?: Express.Multer.File[],
+  ) {
+    return this.svc.update(id, { ...dto, newFiles }, true);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  async delete(@Param('id') id: string) {
+    return this.svc.delete(id);
   }
 }

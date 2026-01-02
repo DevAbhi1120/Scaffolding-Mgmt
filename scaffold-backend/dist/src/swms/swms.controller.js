@@ -18,12 +18,13 @@ const swms_service_1 = require("./swms.service");
 const create_swms_dto_1 = require("./dto/create-swms.dto");
 const update_swms_dto_1 = require("./dto/update-swms.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const platform_express_1 = require("@nestjs/platform-express");
 let SwmsController = class SwmsController {
     constructor(svc) {
         this.svc = svc;
     }
-    async create(dto) {
-        return this.svc.create(dto);
+    async create(dto, files) {
+        return this.svc.create({ ...dto, files });
     }
     async listAll() {
         return this.svc.listAll();
@@ -34,17 +35,22 @@ let SwmsController = class SwmsController {
     async get(id) {
         return this.svc.get(id);
     }
-    async update(id, dto) {
-        return this.svc.update(id, dto, true);
+    async update(id, dto, newFiles) {
+        return this.svc.update(id, { ...dto, newFiles }, true);
+    }
+    async delete(id) {
+        return this.svc.delete(id);
     }
 };
 exports.SwmsController = SwmsController;
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 20)),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.UploadedFiles)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_swms_dto_1.CreateSwmsDto]),
+    __metadata("design:paramtypes", [create_swms_dto_1.CreateSwmsDto, Array]),
     __metadata("design:returntype", Promise)
 ], SwmsController.prototype, "create", null);
 __decorate([
@@ -73,12 +79,22 @@ __decorate([
 __decorate([
     (0, common_1.Put)(':id'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('newFiles', 20)),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.UploadedFiles)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, update_swms_dto_1.UpdateSwmsDto]),
+    __metadata("design:paramtypes", [String, update_swms_dto_1.UpdateSwmsDto, Array]),
     __metadata("design:returntype", Promise)
 ], SwmsController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':id'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], SwmsController.prototype, "delete", null);
 exports.SwmsController = SwmsController = __decorate([
     (0, common_1.Controller)('swms'),
     __metadata("design:paramtypes", [swms_service_1.SwmsService])
